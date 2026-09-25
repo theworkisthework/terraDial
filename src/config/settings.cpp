@@ -1,8 +1,27 @@
 #include "settings.h"
 #include <Preferences.h>
 #include <string.h>
-#include "secrets.h"
 #include "jog_config.h"
+
+// secrets.h is optional and gitignored. Without it the build ships with
+// no network baked in: an empty SSID brings the panel up unconfigured and
+// the Wi-Fi is picked on-device (Settings > Wi-Fi > scan). A secrets.h
+// only needs to define whichever of these it wants to override.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+#ifndef WIFI_SSID
+#define WIFI_SSID ""
+#endif
+#ifndef WIFI_PASS
+#define WIFI_PASS ""
+#endif
+#ifndef FLUIDNC_HOST
+#define FLUIDNC_HOST "terrapen"
+#endif
+#ifndef TERRAPIXEL_HOST
+#define TERRAPIXEL_HOST "terrapen-leds"
+#endif
 
 namespace
 {
