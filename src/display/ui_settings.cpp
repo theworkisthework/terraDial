@@ -142,6 +142,28 @@ namespace
     lv_obj_t *scanOverlay = nullptr;
     lv_obj_t *scanList = nullptr;
     lv_obj_t *scanStatusLbl = nullptr;
+    lv_obj_t *scanRescanBtn = nullptr;
+
+    // Knob highlight: 0..n-1 are the listed networks, n is Rescan -- so
+    // an empty or failed scan still leaves the knob something to click.
+    int scanSel = 0;
+
+    int scanItemCount() { return (int)lv_obj_get_child_cnt(scanList) + 1; }
+
+    void styleScanSelection()
+    {
+        int n = (int)lv_obj_get_child_cnt(scanList);
+        for (int i = 0; i < n; i++)
+        {
+            lv_obj_t *btn = lv_obj_get_child(scanList, i);
+            bool sel = (i == scanSel);
+            lv_obj_set_style_bg_color(btn, sel ? Palette::accent() : Palette::bgPanel(), 0);
+            lv_obj_set_style_text_color(btn, sel ? Palette::accentFg() : lv_color_white(), 0);
+            if (sel) lv_obj_scroll_to_view(btn, LV_ANIM_ON);
+        }
+        lv_obj_set_style_bg_color(scanRescanBtn, scanSel == n ? Palette::accent() : Palette::bgSecondary(), 0);
+        lv_obj_set_style_text_color(scanRescanBtn, scanSel == n ? Palette::accentFg() : lv_color_white(), 0);
+    }
 
     void closeScanOverlay()
     {
@@ -151,6 +173,7 @@ namespace
             scanOverlay = nullptr;
             scanList = nullptr;
             scanStatusLbl = nullptr;
+            scanRescanBtn = nullptr;
         }
     }
 
@@ -165,9 +188,8 @@ namespace
         WifiManager::reconnect(Config::get().wifiSsid, Config::get().wifiPass);
     }
 
-    void networkPickedCb(lv_event_t *e)
+    void pickNetwork(lv_obj_t *btn)
     {
-        lv_obj_t *btn = lv_event_get_target(e);
         const char *ssid = lv_list_get_btn_text(scanList, btn);
         strncpy(Config::get().wifiSsid, ssid, sizeof(Config::get().wifiSsid) - 1);
         Config::get().wifiSsid[sizeof(Config::get().wifiSsid) - 1] = '\0';
@@ -179,9 +201,13 @@ namespace
         openEditor(Config::get().wifiPass, sizeof(Config::get().wifiPass), nullptr, true, reconnectAfterWifiEdit, "Password");
     }
 
+    void networkPickedCb(lv_event_t *e) { pickNetwork(lv_event_get_target(e)); }
+
     void runScan()
     {
         lv_obj_clean(scanList);
+        scanSel = 0;
+        styleScanSelection();
         lv_label_set_text(scanStatusLbl, "Scanning...");
         // Force the redraw NOW: WiFi.scanNetworks() below blocks this task
         // for seconds, so without this the "Scanning..." label wouldn't
@@ -202,21 +228,23 @@ namespace
         if (n == WIFI_SCAN_FAILED)
         {
             lv_label_set_text(scanStatusLbl, "Scan failed -- try Rescan");
+            styleScanSelection();
             return;
         }
         if (n == 0)
         {
             lv_label_set_text(scanStatusLbl, "No networks found nearby");
+            styleScanSelection();
             return;
         }
         lv_label_set_text(scanStatusLbl, "");
         for (int i = 0; i < n; i++)
         {
             lv_obj_t *btn = lv_list_add_btn(scanList, LV_SYMBOL_WIFI, WiFi.SSID(i).c_str());
-            lv_obj_set_style_bg_color(btn, Palette::bgPanel(), 0);
             lv_obj_add_event_cb(btn, networkPickedCb, LV_EVENT_CLICKED, NULL);
         }
         WiFi.scanDelete();
+        styleScanSelection();
     }
 
     void rescanCb(lv_event_t *e) { (void)e; runScan(); }
@@ -271,13 +299,12 @@ namespace
         lv_obj_set_style_bg_opa(scanList, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(scanList, 0, 0);
 
-        lv_obj_t *rescanBtn = lv_btn_create(scanOverlay);
-        lv_obj_set_size(rescanBtn, 100, 30);
-        lv_obj_set_style_bg_color(rescanBtn, Palette::bgSecondary(), 0);
-        lv_obj_set_style_radius(rescanBtn, 15, 0);
-        lv_obj_align(rescanBtn, LV_ALIGN_BOTTOM_MID, 0, -16);
-        lv_obj_add_event_cb(rescanBtn, rescanCb, LV_EVENT_CLICKED, NULL);
-        lv_obj_t *rescanLbl = lv_label_create(rescanBtn);
+        scanRescanBtn = lv_btn_create(scanOverlay);
+        lv_obj_set_size(scanRescanBtn, 100, 30);
+        lv_obj_set_style_radius(scanRescanBtn, 15, 0);
+        lv_obj_align(scanRescanBtn, LV_ALIGN_BOTTOM_MID, 0, -16);
+        lv_obj_add_event_cb(scanRescanBtn, rescanCb, LV_EVENT_CLICKED, NULL);
+        lv_obj_t *rescanLbl = lv_label_create(scanRescanBtn);
         lv_label_set_text(rescanLbl, "Rescan");
         lv_obj_set_style_text_font(rescanLbl, &lv_font_montserrat_12, 0);
         lv_obj_center(rescanLbl);
@@ -954,6 +981,19 @@ lv_obj_t *uiSettingsCreate()
 void uiSettingsHandleRotate(int32_t delta)
 {
     if (delta == 0) return;
+    if (scanOverlay)
+    {
+        // The network list sits on the top layer over whatever category is
+        // open, so it has to claim the knob first -- otherwise turning it
+        // scrolls the hidden Wi-Fi card underneath. Clamped, not wrapped:
+        // the list is short and Rescan is a natural end stop.
+        int count = scanItemCount();
+        scanSel += (int)delta;
+        if (scanSel < 0) scanSel = 0;
+        if (scanSel >= count) scanSel = count - 1;
+        styleScanSelection();
+        return;
+    }
     if (openPanel >= 0)
     {
         // Inside a category the knob scrolls its controls -- several of the
@@ -967,12 +1007,25 @@ void uiSettingsHandleRotate(int32_t delta)
 
 void uiSettingsHandleClick()
 {
+    if (scanOverlay)
+    {
+        if (scanSel < (int)lv_obj_get_child_cnt(scanList)) pickNetwork(lv_obj_get_child(scanList, scanSel));
+        else runScan();
+        return;
+    }
     if (openPanel >= 0) return; // controls inside a panel are touch-operated
     ring.openSelected();
 }
 
 bool uiSettingsHandleBack()
 {
+    if (scanOverlay)
+    {
+        // Same as the overlay's close button: back out and reconnect.
+        closeScanOverlay();
+        reconnectAfterWifiEdit();
+        return true;
+    }
     if (openPanel < 0) return false;
     showRing();
     return true;
