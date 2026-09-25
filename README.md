@@ -192,20 +192,19 @@ panel that has already updated.
 Built with [PlatformIO](https://platformio.org/).
 
 ```bash
-# 1. Wi-Fi credentials and hostnames -- secrets.h is gitignored
-cp include/secrets.h.example include/secrets.h
-$EDITOR include/secrets.h
-
-# 2. Build and flash
+# 1. Build and flash
 pio run -t upload
 
-# 3. Watch the logs
+# 2. Watch the logs
 pio device monitor
 ```
 
-Only the SSID and password are compile-time *defaults*: they're seeded into
-NVS on first boot, after which the Settings screen can change networks
-on-device without a reflash.
+By default no credentials are compiled in: the panel boots unconfigured and
+you pick a network on-device (Settings > Wi-Fi > scan). To bake in default
+credentials or hostnames instead, copy `include/secrets.h.example` to
+`include/secrets.h` (gitignored) and define whichever values you want to
+override. They're only *defaults* either way: seeded into NVS on first boot,
+after which the Settings screen can change networks without a reflash.
 
 A local build reports its version as `dev` unless HEAD is exactly on a tag —
 [`tools/version.py`](tools/version.py) only treats an exact tag as a release,

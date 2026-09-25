@@ -122,8 +122,16 @@ namespace
 
     void refreshSsidLabel()
     {
+        // Tapping this line opens the network scan, so say so -- an
+        // unconfigured panel (empty SSID) otherwise shows a bare "SSID: "
+        // that reads as static text, leaving the password line as the
+        // only obvious control.
+        const char *ssid = Config::get().wifiSsid;
         char buf[48];
-        snprintf(buf, sizeof(buf), "SSID: %s", Config::get().wifiSsid);
+        if (ssid[0] == '\0')
+            snprintf(buf, sizeof(buf), "SSID: (tap to choose)");
+        else
+            snprintf(buf, sizeof(buf), "SSID: %s " LV_SYMBOL_RIGHT, ssid);
         lv_label_set_text(ssidLbl, buf);
     }
 
@@ -968,6 +976,14 @@ bool uiSettingsHandleBack()
     if (openPanel < 0) return false;
     showRing();
     return true;
+}
+
+void uiSettingsOpenWifiSetup()
+{
+    // Wi-Fi is category 0, which is also the ring's default selection, so
+    // backing out of the card lands on Wi-Fi in the ring.
+    openCategory(0);
+    openScanOverlay();
 }
 
 void uiSettingsUpdate()

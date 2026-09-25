@@ -192,6 +192,21 @@ namespace UiNav
         uiDialSetHandlers(onDialOpen, onDialStatusTap);
 
         lv_scr_load(screens[DIAL_SCREEN_INDEX]);
+
+        // No network configured (a fresh public build, or NVS wiped): the
+        // panel is useless until it's on Wi-Fi, so go straight to picking
+        // one. Deferred to a one-shot timer rather than done here because
+        // the scan blocks for seconds and needs the radio in STA mode --
+        // at this point in setup() the backlight is still off and
+        // WifiManager::begin() hasn't run yet.
+        if (Config::get().wifiSsid[0] == '\0')
+        {
+            lv_timer_t *t = lv_timer_create([](lv_timer_t *) {
+                goTo(SETTINGS_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
+                uiSettingsOpenWifiSetup();
+            }, 300, nullptr);
+            lv_timer_set_repeat_count(t, 1);
+        }
     }
 
     void update()
