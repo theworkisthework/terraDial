@@ -235,24 +235,26 @@ namespace UiNav
             if (ScreenSleep::noteInputAndWake()) return;
         }
 
+        // Menu-navigation direction preference (Settings > Display). Applied
+        // here so every browsing surface (dial, Jobs, Settings, the radial
+        // keyboard) agrees -- but deliberately NOT to the Jog screen below,
+        // which passes the raw delta straight through: jog direction maps
+        // to real machine motion, so flipping it to suit a menu preference
+        // would be a safety trap.
+        int32_t menuDelta = Config::get().invertMenuRotation ? -delta : delta;
+
         // The radial keyboard is modal and owns the knob outright while it's
-        // up: rotate moves the highlighted key, click types it, long-press
-        // cancels. Nothing below runs, so no screen can navigate out from
+        // up: rotate spins the ring, click types the key at the top,
+        // long-press cancels. Nothing below runs, so no screen can navigate out from
         // under an open text field.
         if (RadialKeyboard::isOpen())
         {
-            if (delta != 0) RadialKeyboard::handleRotate(delta);
+            if (delta != 0) RadialKeyboard::handleRotate(menuDelta);
             if (ev == ButtonEvent::Click) RadialKeyboard::handleClick();
             else if (ev == ButtonEvent::LongPress) RadialKeyboard::handleLongPress();
             return;
         }
 
-        // Menu-navigation direction preference (Settings > Display). Applied
-        // here so every browsing surface (dial, Jobs, Settings) agrees --
-        // but deliberately NOT to the Jog screen below, which passes the raw
-        // delta straight through: jog direction maps to real machine motion,
-        // so flipping it to suit a menu preference would be a safety trap.
-        int32_t menuDelta = Config::get().invertMenuRotation ? -delta : delta;
 
         if (currentIndex == DIAL_SCREEN_INDEX)
         {

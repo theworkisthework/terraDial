@@ -3,7 +3,8 @@
 #include <stddef.h>
 
 // Full-screen radial text entry: characters sit around the rim, the knob
-// moves the highlight, and the centre hub commits the highlighted key.
+// spins the ring to bring a key to the top slot (the same motion as the
+// menus), and the centre hub commits the selected key.
 //
 // This replaces LVGL's stock lv_keyboard for every text field in the app.
 // A QWERTY map across a 240px round panel gives ~24px keys -- narrower than
