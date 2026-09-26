@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 #include <string.h>
 #include "../config/settings.h"
+#include "host_spec.h"
 
 TerraPixelClient terraPixel;
 
@@ -22,18 +23,21 @@ bool TerraPixelClient::ensureResolved()
     if (now - lastResolveAttempt_ < 3000) return false;
     lastResolveAttempt_ = now;
 
-    IPAddress ip = MDNS.queryHost(Config::get().terraPixelHost, 1500);
+    HostSpec spec;
+    if (!hostSpecParse(Config::get().terraPixelHost, spec)) return false;
+    IPAddress ip = hostSpecResolve(spec, 1500);
     if (ip == IPAddress((uint32_t)0)) return false;
 
     resolvedIp_ = ip;
+    resolvedPort_ = spec.port ? spec.port : 80;
     haveIp_ = true;
-    Serial.printf("[terrapixel] resolved %s.local -> %s\n", Config::get().terraPixelHost, ip.toString().c_str());
+    Serial.printf("[terrapixel] %s -> %s:%u\n", Config::get().terraPixelHost, ip.toString().c_str(), resolvedPort_);
     return true;
 }
 
 String TerraPixelClient::baseUrl()
 {
-    return "http://" + resolvedIp_.toString();
+    return "http://" + resolvedIp_.toString() + ":" + String(resolvedPort_);
 }
 
 bool TerraPixelClient::refreshStatusNow()
