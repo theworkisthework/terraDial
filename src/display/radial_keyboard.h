@@ -17,8 +17,13 @@
 // underneath.
 namespace RadialKeyboard
 {
+    // A password field ignores `initial` and starts blank (so the saved
+    // value can never be revealed), masks what's typed except the last
+    // character for a few seconds, and adds an eye key to the rim that
+    // shows or hides everything typed so far.
+    //
     // onAccept receives the finished text (only on the OK key). onCancel
-    // fires on the knob long-press. Exactly one of them runs, then the
+    // fires on the rim's cancel key or the knob long-press. Exactly one of them runs, then the
     // overlay closes itself.
     void open(const char *title,
               const char *initial,

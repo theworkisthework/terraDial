@@ -188,17 +188,31 @@ namespace
         WifiManager::reconnect(Config::get().wifiSsid, Config::get().wifiPass);
     }
 
-    void pickNetwork(lv_obj_t *btn)
+    // The network picked from the scan, held back until its password is
+    // saved. Committing the SSID on the pick meant canceling the password
+    // step still switched networks -- and on a first boot left an SSID
+    // saved with no password, so the auto-open setup never came back.
+    char pendingSsid[sizeof(AppSettings::wifiSsid)] = "";
+
+    void commitPendingSsid()
     {
-        const char *ssid = lv_list_get_btn_text(scanList, btn);
-        strncpy(Config::get().wifiSsid, ssid, sizeof(Config::get().wifiSsid) - 1);
+        // editAccepted() has already stored the password and saved; this
+        // pairs it with the network it was typed for.
+        strncpy(Config::get().wifiSsid, pendingSsid, sizeof(Config::get().wifiSsid) - 1);
         Config::get().wifiSsid[sizeof(Config::get().wifiSsid) - 1] = '\0';
         Config::save();
         refreshSsidLabel();
+    }
+
+    void pickNetwork(lv_obj_t *btn)
+    {
+        strncpy(pendingSsid, lv_list_get_btn_text(scanList, btn), sizeof(pendingSsid) - 1);
+        pendingSsid[sizeof(pendingSsid) - 1] = '\0';
         closeScanOverlay();
         // Naturally flows into typing the password for the network just
-        // picked -- password-editing itself is unchanged.
-        openEditor(Config::get().wifiPass, sizeof(Config::get().wifiPass), nullptr, true, reconnectAfterWifiEdit, "Password");
+        // picked. Either way out reconnects: onto the new network if saved,
+        // back onto the old one if canceled.
+        openEditor(Config::get().wifiPass, sizeof(Config::get().wifiPass), commitPendingSsid, true, reconnectAfterWifiEdit, "Password");
     }
 
     void networkPickedCb(lv_event_t *e) { pickNetwork(lv_event_get_target(e)); }
