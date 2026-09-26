@@ -54,11 +54,15 @@ public:
     void setRadius(float radiusLeds);
     void toggleParty();
     void requestRefresh();
+    // The LED host setting changed: resolve it again before the next
+    // request rather than keep talking to the old address.
+    void hostChanged() { haveIp_ = false; lastResolveAttempt_ = 0; }
 
 private:
     TerraPixelStatus status_;
-    bool haveIp_ = false;
+    volatile bool haveIp_ = false;
     IPAddress resolvedIp_;
+    uint16_t resolvedPort_ = 80;
     uint32_t lastResolveAttempt_ = 0;
 
     static const uint32_t REQUEST_TIMEOUT_MS = 1000;

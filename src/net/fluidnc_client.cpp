@@ -2,8 +2,10 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <WebSocketsClient.h>
+#include <HTTPClient.h>
 #include <string.h>
 #include "../config/settings.h"
+#include "host_spec.h"
 
 FluidNCClient fluidNC;
 
@@ -106,15 +108,109 @@ bool FluidNCClient::fileListEntry(int i, FluidNCFileEntry &out) const
 
 bool FluidNCClient::resolveHost()
 {
-    IPAddress ip = MDNS.queryHost(Config::get().fluidNcHost, 2000);
-    if (ip == IPAddress((uint32_t)0)) return false;
+    HostSpec spec;
+    if (!hostSpecParse(Config::get().fluidNcHost, spec))
+    {
+        Serial.println("[fluidnc] no FluidNC host set");
+        return false;
+    }
+    IPAddress ip = hostSpecResolve(spec, 2000);
+    if (ip == IPAddress((uint32_t)0))
+    {
+        Serial.printf("[fluidnc] mDNS lookup for %s.local failed, retrying\n", spec.name);
+        return false;
+    }
     resolvedIp_ = ip;
+    httpPort_ = spec.port ? spec.port : 80;
     return true;
+}
+
+// Asks FluidNC which port its WebSocket is on, the way terraForge does
+// (theworkisthework/terraForge, src/machine/fluidnc.ts). The two firmware
+// generations differ:
+//
+//   4.x  the socket is on the HTTP port (80), mounted at "/"
+//   3.x  the socket is a separate server on port 81; port 80 answers a
+//        WebSocket upgrade with a plain HTTP page, so the socket never opens
+//
+// [ESP800] is the ESP3D-compatible "who are you" command both generations
+// answer over HTTP, e.g.
+//   FW version: FluidNC v4.0.1 # ... # webcommunication: Sync: 80 # ...
+// and its "webcommunication: Sync: <port>" field names the socket port
+// outright. Returns 0 if the probe gets no usable answer.
+uint16_t FluidNCClient::probeWsPort()
+{
+    HTTPClient http;
+    http.setTimeout(3000);
+    http.setConnectTimeout(3000);
+    char url[80];
+    snprintf(url, sizeof(url), "http://%s:%u/command?plain=%%5BESP800%%5D",
+             resolvedIp_.toString().c_str(), httpPort_);
+    if (!http.begin(url)) return 0;
+    int code = http.GET();
+    String body = code == HTTP_CODE_OK ? http.getString() : String();
+    http.end();
+    if (body.length() == 0)
+    {
+        Serial.printf("[fluidnc] firmware probe failed (HTTP %d)\n", code);
+        return 0;
+    }
+
+    int major = -1;
+    int fw = body.indexOf("FW version");
+    if (fw >= 0)
+    {
+        // First digit after "FW version:", skipping "FluidNC v".
+        int i = fw + 10;
+        while (i < (int)body.length() && !isdigit((unsigned char)body[i])) i++;
+        if (i < (int)body.length()) major = atoi(body.c_str() + i);
+        int end = body.indexOf('#', fw);
+        Serial.printf("[fluidnc] firmware: %s\n", body.substring(fw, end > fw ? end : fw + 40).c_str());
+    }
+
+    int wc = body.indexOf("webcommunication");
+    if (wc >= 0)
+    {
+        int sync = body.indexOf("Sync:", wc);
+        int end = body.indexOf('#', wc);
+        if (sync >= 0 && (end < 0 || sync < end))
+        {
+            long port = strtol(body.c_str() + sync + 5, nullptr, 10);
+            if (port > 0 && port <= 65535) return (uint16_t)port;
+        }
+    }
+    if (major >= 4) return httpPort_;
+    if (major >= 0) return 81;
+    Serial.println("[fluidnc] firmware probe: no version in the response");
+    return 0;
+}
+
+void FluidNCClient::openSocket()
+{
+    Serial.printf("[fluidnc] %s -> ws://%s:%u/%s\n", Config::get().fluidNcHost,
+                  resolvedIp_.toString().c_str(), wsPort_, wsPortGuessed_ ? " (port guessed)" : "");
+    wsClient.begin(resolvedIp_.toString().c_str(), wsPort_, "/");
+    wsClient.onEvent(wsEventTrampoline);
+    wsClient.setReconnectInterval(3000);
+    wsBeganAt_ = millis();
+    wsBegun_ = true;
 }
 
 void FluidNCClient::update()
 {
     if (WiFi.status() != WL_CONNECTED) return;
+
+    if (hostChanged_)
+    {
+        hostChanged_ = false;
+        if (wsBegun_)
+        {
+            Serial.println("[fluidnc] host changed, reconnecting");
+            wsClient.disconnect();
+            wsBegun_ = false;
+        }
+        lastResolveAttempt_ = 0; // try the new host straight away
+    }
 
     if (!wsBegun_)
     {
@@ -122,23 +218,31 @@ void FluidNCClient::update()
         if (now - lastResolveAttempt_ < 3000) return;
         lastResolveAttempt_ = now;
 
-        if (!resolveHost())
-        {
-            Serial.printf("[fluidnc] mDNS lookup for %s.local failed, retrying\n", Config::get().fluidNcHost);
-            return;
-        }
+        if (!resolveHost()) return;
 
-        Serial.printf("[fluidnc] resolved %s.local -> %s, opening websocket\n", Config::get().fluidNcHost, resolvedIp_.toString().c_str());
-        // FluidNC's AsyncWebSocket is mounted at "/" on the same port as its
-        // HTTP server (default 80) -- there is no separate port 81 in the
-        // current FluidNC source (WebUI/WebUIServer.cpp), unlike the older
-        // ESP3D-webui convention this was originally modeled on.
-        wsClient.begin(resolvedIp_.toString().c_str(), 80, "/");
-        wsClient.onEvent(wsEventTrampoline);
-        wsClient.setReconnectInterval(3000);
-        wsBegun_ = true;
+        uint16_t port = probeWsPort();
+        wsPortGuessed_ = (port == 0);
+        // Unknown firmware: start on the HTTP port (4.x, the current
+        // release) and let the fallback below try 81.
+        wsPort_ = port ? port : httpPort_;
+        openSocket();
         return;
     }
+
+    // Couldn't tell which firmware this is: if the socket hasn't opened
+    // after a while, try the other generation's port. terraForge does the
+    // same on seeing 3.x's HTTP reply to an upgrade; WebSocketsClient
+    // doesn't surface that reply, so a timeout stands in for it. Once a
+    // port connects it's kept.
+    if (wsPortGuessed_ && !status_.connected && millis() - wsBeganAt_ > 10000)
+    {
+        wsPort_ = (wsPort_ == 81) ? httpPort_ : 81;
+        Serial.printf("[fluidnc] no connection yet, trying port %u\n", wsPort_);
+        wsClient.disconnect();
+        openSocket();
+        return;
+    }
+    if (status_.connected) wsPortGuessed_ = false;
 
     servicePendingHome(); // may enqueue, so before the drain
     drainCommandQueue();

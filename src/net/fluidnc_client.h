@@ -76,6 +76,11 @@ public:
     // Call once, after WiFi is connected.
     void begin();
 
+    // UI-thread safe. The FluidNC host setting changed: drop the current
+    // connection (if any) and resolve the new host on the next update().
+    // Without this the first address found stuck until a reboot.
+    void hostChanged() { hostChanged_ = true; }
+
     // networkTask only. Handles mDNS resolution, (re)connection, draining
     // the outbound command queue, and pumping received frames.
     void update();
@@ -124,8 +129,20 @@ private:
     FluidNCStatus status_;
 
     bool wsBegun_ = false;
+    volatile bool hostChanged_ = false; // set by the UI task, consumed by networkTask
     uint32_t lastResolveAttempt_ = 0;
     IPAddress resolvedIp_;
+    // FluidNC's HTTP port (80 unless the host setting names another), and
+    // the WebSocket port, which depends on the firmware: 4.x serves the
+    // socket on the HTTP port, 3.x on a separate port 81. See
+    // probeWsPort().
+    uint16_t httpPort_ = 80;
+    uint16_t wsPort_ = 80;
+    // True when neither the probe nor a version heuristic could say which
+    // port the socket is on. update() then alternates between the HTTP
+    // port and 81 until one connects.
+    bool wsPortGuessed_ = false;
+    uint32_t wsBeganAt_ = 0;
 
     char lineBuf_[192];
     size_t lineLen_ = 0;
@@ -166,6 +183,8 @@ private:
     void servicePendingHome();
 
     bool resolveHost();
+    uint16_t probeWsPort();
+    void openSocket();
     void sendRaw(const char *s);
     void sendLine(const String &line);
     void ingest(const char *data, size_t len);

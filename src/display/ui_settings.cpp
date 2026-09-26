@@ -1,6 +1,8 @@
 #include "ui_settings.h"
 #include "../config/settings.h"
 #include "../net/wifi_manager.h"
+#include "../net/fluidnc_client.h"
+#include "../net/terrapixel_client.h"
 #include "radial_ring.h"
 #include "ui_nav.h"
 #include "palette.h"
@@ -460,16 +462,30 @@ namespace
         lv_label_set_text(tpHostLbl, buf);
     }
 
+    // Applied immediately: without the hostChanged() nudge the clients kept
+    // whatever address they had first resolved until a reboot.
+    void fncHostSaved()
+    {
+        refreshHostLabels();
+        fluidNC.hostChanged();
+    }
+
+    void tpHostSaved()
+    {
+        refreshHostLabels();
+        terraPixel.hostChanged();
+    }
+
     void fncHostCb(lv_event_t *e)
     {
         (void)e;
-        openEditor(Config::get().fluidNcHost, sizeof(Config::get().fluidNcHost), refreshHostLabels, false, nullptr, "FluidNC host");
+        openEditor(Config::get().fluidNcHost, sizeof(Config::get().fluidNcHost), fncHostSaved, false, nullptr, "FluidNC host");
     }
 
     void tpHostCb(lv_event_t *e)
     {
         (void)e;
-        openEditor(Config::get().terraPixelHost, sizeof(Config::get().terraPixelHost), refreshHostLabels, false, nullptr, "LED host");
+        openEditor(Config::get().terraPixelHost, sizeof(Config::get().terraPixelHost), tpHostSaved, false, nullptr, "LED host");
     }
 
     void penMmSliderCb(lv_event_t *e)
