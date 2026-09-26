@@ -44,12 +44,33 @@ namespace
     // enough that it isn't sitting there for someone else to read.
     const uint32_t PEEK_MS = 3000;
 
+    // Rim geometry on the 240px round panel (visible radius ~120). Keys sit
+    // as close to the glass as an 18px glyph allows, and the hub grows out
+    // to just inside them, so the whole face is keyboard rather than a
+    // ring floating in empty margin.
+    //
+    // The selected key is centred on the same radius as the rest, NOT
+    // pulled inward to make room for its bigger glyph: centring the 32px
+    // label box there already puts the middle of a lowercase letter within
+    // a pixel of where it sat at 18px (the bigger font's box carries more
+    // descender space), and capitals still clear the glass. Pulling it in
+    // made the selection visibly drop as it arrived at the top.
+    const lv_coord_t RADIUS = 100;
+    const lv_coord_t HUB_SIZE = 156;
+    const lv_coord_t TEXT_WIDTH = HUB_SIZE - 28; // the hub is round -- leave the text clear of its curve
 
-    // Rim geometry. RADIUS keeps the labels inside the round panel's ~120px
-    // visible circle with margin for the enlarged selected glyph.
-    const lv_coord_t RADIUS = 98;
-    const lv_coord_t HUB_SIZE = 104;
-    const lv_coord_t TEXT_WIDTH = HUB_SIZE - 16;
+    // Ring motion, matched to RadialRing (the home dial, Settings, Jobs) so
+    // turning the knob feels the same everywhere: the selected key sits at
+    // the top and the ring springs round underneath it.
+    const uint32_t SPIN_MS = 320;
+    // Pushes keys near the top apart, and bunches the far side up, to give
+    // the enlarged selected glyph room -- the same curve as
+    // RadialRing::setSpread(), kept gentler because a far key still has to
+    // be readable enough to tap. The far keys also shrink (see
+    // fontForKey()), which is what leaves room to bunch them this much.
+    const float SPREAD = 0.35f;
+    // Keys fade with distance from the top slot, like the menu chips.
+    const lv_opa_t OPA_FAR = 110;
 
     lv_obj_t *overlay = nullptr;
     lv_obj_t *hub = nullptr;
@@ -57,12 +78,31 @@ namespace
     lv_obj_t *textLbl = nullptr;
     lv_obj_t *previewLbl = nullptr;
     lv_obj_t *keyLbls[MAX_KEYS] = {nullptr};
+    // The font each key label currently has, so layoutKeys() only touches
+    // a label's font when it crosses a size band -- a font change forces
+    // the label to re-measure, which is too costly for every key on every
+    // animation frame.
+    const lv_font_t *keyFonts[MAX_KEYS] = {nullptr};
 
     Key keys[MAX_KEYS];
     int keyCount = 0;
     int selected = 0;
     int prevSelected = -1;
     int page = 0;
+
+    // Each key's centre angle on the unrotated ring (0 = top, clockwise).
+    // Keys get a share of the circle in proportion to keyWeight(), not an
+    // even slice: an icon is twice a letter's width and "ABC" three times,
+    // and even slices sized for letters made them overlap their neighbours.
+    float keyCentreDeg[MAX_KEYS] = {0.0f};
+
+    // Ring rotation, in hundredths of a degree. ringPos is the selection's
+    // UNWRAPPED position (it keeps counting past keyCount), so the target
+    // is always exactly a key's centre plus whole turns however fast the
+    // knob spins, and the ring never takes the long way round when it
+    // wraps. Same reasoning as RadialRing::targetOffsetX100_.
+    int32_t ringPos = 0;
+    int32_t ringOffsetX100 = 0;
 
     char buffer[80];
     size_t bufMax = sizeof(buffer) - 1;
@@ -155,18 +195,140 @@ namespace
         lv_label_set_text(previewLbl, buf);
     }
 
+    // Keys shrink in bands with distance from the top slot, so the far side
+    // -- where the spread bunches them together -- doesn't turn into a
+    // solid band of touching glyphs. `nearness` is 1 at the top, 0 opposite.
+    // "ABC"/"SP" are words, not glyphs; the rest of the action keys are
+    // LVGL symbols, which are much wider than a letter at the same size.
+    bool isWordKey(int i) { return keys[i].action == Action::NextPage || keys[i].action == Action::Space; }
+    bool isIconKey(int i) { return keys[i].action != Action::Char && !isWordKey(i); }
+
+    // Share of the ring each key takes, relative to a letter.
+    float keyWeight(int i)
+    {
+        if (isWordKey(i)) return 1.6f;
+        if (isIconKey(i)) return 1.3f;
+        return 1.0f;
+    }
+
+    const lv_font_t *fontForKey(int i, float nearness)
+    {
+        // Icons and words run a size or so behind letters in every band --
+        // even with their wider share of the ring, a 32px backspace is as
+        // wide as three letters.
+        bool sel = (i == selected);
+        if (isWordKey(i))
+        {
+            if (sel) return &lv_font_montserrat_24;
+            return nearness > 0.6f ? &lv_font_montserrat_14 : &lv_font_montserrat_12;
+        }
+        if (isIconKey(i))
+        {
+            if (sel) return &lv_font_montserrat_24;
+            if (nearness > 0.6f) return &lv_font_montserrat_16;
+            return nearness > 0.3f ? &lv_font_montserrat_14 : &lv_font_montserrat_12;
+        }
+        if (sel) return &lv_font_montserrat_32;
+        if (nearness > 0.6f) return &lv_font_montserrat_18;
+        return nearness > 0.3f ? &lv_font_montserrat_14 : &lv_font_montserrat_12;
+    }
+
     void styleKey(int i, bool sel)
     {
+        // Colour only -- size is set by layoutKeys(), from position.
         if (i < 0 || i >= keyCount || !keyLbls[i]) return;
-        lv_obj_set_style_text_font(keyLbls[i], sel ? &lv_font_montserrat_24 : &lv_font_montserrat_12, 0);
         lv_obj_set_style_text_color(keyLbls[i], sel ? Palette::accent() : Palette::textMuted(), 0);
+        if (sel) lv_obj_move_foreground(keyLbls[i]); // over its bunched-up neighbours
+    }
+
+    void computeKeyAngles()
+    {
+        float total = 0.0f;
+        for (int i = 0; i < keyCount; i++) total += keyWeight(i);
+        float acc = 0.0f;
+        for (int i = 0; i < keyCount; i++)
+        {
+            // Key 0's centre sits at the top, so the ring starts half a
+            // slot before it.
+            keyCentreDeg[i] = 360.0f * (acc - keyWeight(0) / 2.0f + keyWeight(i) / 2.0f) / total;
+            acc += keyWeight(i);
+        }
+    }
+
+    // The rotation that puts the selected key at the top, including the
+    // whole turns ringPos has wound past.
+    int32_t ringTargetX100()
+    {
+        int32_t turns = (ringPos - selected) / keyCount; // exact: selected == ringPos mod keyCount
+        return -(int32_t)((keyCentreDeg[selected] + 360.0f * turns) * 100);
+    }
+
+    // Positions, fades and sizes every key for the current rotation. Runs
+    // on every animation frame; fonts only change as a key crosses a band.
+    void layoutKeys()
+    {
+        float offsetDeg = ringOffsetX100 / 100.0f;
+        for (int i = 0; i < keyCount; i++)
+        {
+            if (!keyLbls[i]) continue;
+            float angle = keyCentreDeg[i] + offsetDeg;
+            while (angle > 180.0f) angle -= 360.0f;
+            while (angle < -180.0f) angle += 360.0f;
+
+            // RadialRing::spreadAngle() with a limit of 180 degrees.
+            float u = angle / 180.0f;
+            angle = 180.0f * (u + SPREAD * sinf((float)M_PI * u) / (float)M_PI);
+
+            float nearness = 1.0f - fabsf(angle) / 180.0f;
+            const lv_font_t *font = fontForKey(i, nearness);
+            if (font != keyFonts[i])
+            {
+                lv_obj_set_style_text_font(keyLbls[i], font, 0);
+                keyFonts[i] = font;
+            }
+            float rad = angle * (float)M_PI / 180.0f;
+            lv_obj_align(keyLbls[i], LV_ALIGN_CENTER,
+                         (lv_coord_t)(RADIUS * sinf(rad)),
+                         (lv_coord_t)(-RADIUS * cosf(rad)));
+            lv_obj_set_style_text_opa(keyLbls[i], (lv_opa_t)(OPA_FAR + (LV_OPA_COVER - OPA_FAR) * nearness), 0);
+        }
+    }
+
+    void ringAnimCb(void *var, int32_t v)
+    {
+        (void)var;
+        ringOffsetX100 = v;
+        layoutKeys();
+    }
+
+    void spinToRingPos()
+    {
+        int32_t target = ringTargetX100();
+        lv_anim_del(&ringOffsetX100, ringAnimCb);
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, &ringOffsetX100);
+        lv_anim_set_exec_cb(&a, ringAnimCb);
+        lv_anim_set_values(&a, ringOffsetX100, target);
+        lv_anim_set_time(&a, SPIN_MS);
+        lv_anim_set_path_cb(&a, lv_anim_path_overshoot);
+        lv_anim_start(&a);
+    }
+
+    // Moves the selection by `steps` keys (either sign) and spins the ring
+    // to bring it to the top.
+    void stepSelection(int32_t steps)
+    {
+        if (keyCount == 0 || steps == 0) return;
+        ringPos += steps;
+        selected = (int)((ringPos % keyCount + keyCount) % keyCount);
+        spinToRingPos();
     }
 
     void applySelection()
     {
-        // Only the two keys that changed state are restyled. Font changes
-        // force a label relayout, so touching all ~30 every detent would be
-        // needlessly expensive.
+        // Only the two keys that changed state are recoloured; their sizes
+        // follow on the next layoutKeys() pass, which the spin runs.
         if (prevSelected != selected)
         {
             styleKey(prevSelected, false);
@@ -178,11 +340,15 @@ namespace
 
     void keyTapCb(lv_event_t *e)
     {
-        // Tapping a rim key only MOVES the highlight; the hub commits it.
-        // At ~20px apart a mis-tap is likely, and a mis-tap that merely
-        // moves the cursor costs nothing, whereas one that typed a wrong
-        // character would.
-        selected = (int)(intptr_t)lv_event_get_user_data(e);
+        // Tapping a rim key only SELECTS it -- spins it to the top -- and the
+        // hub commits it. At ~20px apart a mis-tap is likely, and a mis-tap
+        // that merely moves the selection costs nothing, whereas one that
+        // typed a wrong character would. (RadialRing opens on tap, which is
+        // why the keyboard doesn't use it.)
+        int target = (int)(intptr_t)lv_event_get_user_data(e);
+        int fwd = ((target - selected) % keyCount + keyCount) % keyCount;
+        int back = keyCount - fwd;
+        stepSelection(fwd <= back ? fwd : -back); // the shorter way round
         applySelection();
     }
 
@@ -227,24 +393,13 @@ namespace
             if (keys[i].action == Action::Char) snprintf(txt, sizeof(txt), "%c", keys[i].ch);
             else snprintf(txt, sizeof(txt), "%s", keys[i].label);
             lv_label_set_text(lbl, txt);
-            lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
-            lv_obj_set_style_text_color(lbl, Palette::textMuted(), 0);
-
-            // Keys sit at fixed angles and the HIGHLIGHT moves, rather than
-            // the whole ring rotating like the home dial. Spinning ~30
-            // labels every animation frame would cost far more than the
-            // dial's 8, and with this many keys the rotation wouldn't read
-            // as motion anyway.
-            float angle = -90.0f + 360.0f * i / keyCount;
-            float rad = angle * (float)M_PI / 180.0f;
-            lv_obj_align(lbl, LV_ALIGN_CENTER,
-                         (lv_coord_t)(RADIUS * cosf(rad)),
-                         (lv_coord_t)(RADIUS * sinf(rad)));
 
             lv_obj_add_flag(lbl, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_set_ext_click_area(lbl, 8);
             lv_obj_add_event_cb(lbl, keyTapCb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
             keyLbls[i] = lbl;
+            keyFonts[i] = nullptr;
+            styleKey(i, false);
         }
 
         if (keepAction)
@@ -259,6 +414,15 @@ namespace
             }
         }
         if (selected >= keyCount) selected = 0;
+
+        // Every page has its own key angles, so snap straight to the new
+        // ring rather than animating from the old page's geometry.
+        lv_anim_del(&ringOffsetX100, ringAnimCb);
+        computeKeyAngles();
+        ringPos = selected;
+        ringOffsetX100 = ringTargetX100();
+        layoutKeys();
+
         prevSelected = -1;
         styleKey(selected, true);
         prevSelected = selected;
@@ -278,6 +442,7 @@ namespace
         // Don't leave a typed password sitting in a static buffer after the
         // editor has handed it off.
         memset(buffer, 0, sizeof(buffer));
+        lv_anim_del(&ringOffsetX100, ringAnimCb); // it positions labels about to be deleted
         if (!overlay) return;
         lv_obj_del(overlay);
         overlay = nullptr;
@@ -422,24 +587,24 @@ namespace RadialKeyboard
 
         titleLbl = lv_label_create(hub);
         lv_label_set_text(titleLbl, titleText);
-        lv_obj_set_style_text_font(titleLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(titleLbl, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(titleLbl, Palette::textMuted(), 0);
-        lv_obj_align(titleLbl, LV_ALIGN_CENTER, 0, -30);
+        lv_obj_align(titleLbl, LV_ALIGN_CENTER, 0, -42);
 
         textLbl = lv_label_create(hub);
         lv_obj_set_width(textLbl, TEXT_WIDTH);
         lv_label_set_long_mode(textLbl, LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_align(textLbl, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_font(textLbl, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(textLbl, &lv_font_montserrat_18, 0);
         lv_obj_set_style_text_color(textLbl, Palette::text(), 0);
-        lv_obj_align(textLbl, LV_ALIGN_CENTER, 0, -8);
+        lv_obj_align(textLbl, LV_ALIGN_CENTER, 0, -10);
 
         // Restates the highlighted key in the middle, so you never have to
         // read the small rim glyph to know what a click will type.
         previewLbl = lv_label_create(hub);
-        lv_obj_set_style_text_font(previewLbl, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(previewLbl, &lv_font_montserrat_24, 0);
         lv_obj_set_style_text_color(previewLbl, Palette::accent(), 0);
-        lv_obj_align(previewLbl, LV_ALIGN_CENTER, 0, 24);
+        lv_obj_align(previewLbl, LV_ALIGN_CENTER, 0, 30);
 
         refreshText();
         buildRing();
@@ -450,7 +615,7 @@ namespace RadialKeyboard
     void handleRotate(int32_t delta)
     {
         if (!overlay || keyCount == 0 || delta == 0) return;
-        selected = (int)(((selected + delta) % keyCount + keyCount) % keyCount);
+        stepSelection(delta);
         applySelection();
     }
 
