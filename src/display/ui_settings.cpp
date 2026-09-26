@@ -119,6 +119,8 @@ namespace
     lv_obj_t *ssidLbl = nullptr;
     lv_obj_t *passLbl = nullptr;
     lv_obj_t *wifiStatusLbl = nullptr;
+    lv_obj_t *forgetBtn = nullptr;
+    lv_obj_t *forgetLbl = nullptr;
 
     void refreshSsidLabel()
     {
@@ -133,6 +135,13 @@ namespace
         else
             snprintf(buf, sizeof(buf), "SSID: %s " LV_SYMBOL_RIGHT, ssid);
         lv_label_set_text(ssidLbl, buf);
+
+        // Nothing to forget without a network.
+        if (forgetBtn)
+        {
+            if (ssid[0] == '\0') lv_obj_add_flag(forgetBtn, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_clear_flag(forgetBtn, LV_OBJ_FLAG_HIDDEN);
+        }
     }
 
     // ---- Network picker: scan and pick instead of typing an SSID ----
@@ -338,6 +347,53 @@ namespace
         openEditor(Config::get().wifiPass, sizeof(Config::get().wifiPass), nullptr, true, reconnectAfterWifiEdit, "Password");
     }
 
+    // ---- Forget network ----
+    // Two taps: the first arms it for FORGET_ARM_MS, the second clears the
+    // saved SSID and password. One stray tap on a panel that only reaches
+    // the plotter over Wi-Fi shouldn't be able to strand it.
+    const uint32_t FORGET_ARM_MS = 3000;
+    lv_timer_t *forgetArmTimer = nullptr;
+
+    void disarmForget()
+    {
+        if (forgetArmTimer)
+        {
+            lv_timer_del(forgetArmTimer);
+            forgetArmTimer = nullptr;
+        }
+        if (!forgetBtn) return;
+        lv_obj_set_style_bg_color(forgetBtn, Palette::bgSecondary(), 0);
+        lv_label_set_text(forgetLbl, "Forget network");
+    }
+
+    void forgetCb(lv_event_t *e)
+    {
+        (void)e;
+        if (!forgetArmTimer)
+        {
+            lv_obj_set_style_bg_color(forgetBtn, Palette::alert(), 0);
+            lv_label_set_text(forgetLbl, "Tap again to forget");
+            forgetArmTimer = lv_timer_create([](lv_timer_t *) { disarmForget(); }, FORGET_ARM_MS, nullptr);
+            lv_timer_set_repeat_count(forgetArmTimer, 1);
+            return;
+        }
+
+        // Stored as empty strings rather than removed from NVS: a removed
+        // key would fall back to secrets.h's compile-time default, so a dev
+        // build with credentials baked in would quietly rejoin the network
+        // you just forgot.
+        disarmForget();
+        Config::get().wifiSsid[0] = '\0';
+        Config::get().wifiPass[0] = '\0';
+        Config::save();
+        refreshSsidLabel();
+        WifiManager::reconnect("", ""); // drops the current connection
+        // Straight into picking a new one, same as a first boot. Canceling
+        // the scan leaves the panel unconfigured, and the next boot opens
+        // it again.
+        openScanOverlay();
+    }
+
     void connectCb(lv_event_t *e)
     {
         (void)e;
@@ -375,6 +431,16 @@ namespace
         lv_label_set_text(btnLbl, "Connect");
         lv_obj_set_style_text_color(btnLbl, Palette::accentFg(), 0);
         lv_obj_center(btnLbl);
+
+        forgetBtn = lv_btn_create(card);
+        lv_obj_set_size(forgetBtn, 150, 30);
+        lv_obj_set_style_radius(forgetBtn, 15, 0);
+        lv_obj_add_event_cb(forgetBtn, forgetCb, LV_EVENT_CLICKED, NULL);
+        forgetLbl = lv_label_create(forgetBtn);
+        lv_obj_set_style_text_font(forgetLbl, &lv_font_montserrat_12, 0);
+        lv_obj_center(forgetLbl);
+        disarmForget();
+        refreshSsidLabel(); // sets the button's visibility
 
         return card;
     }
