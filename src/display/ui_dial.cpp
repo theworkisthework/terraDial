@@ -3,6 +3,7 @@
 #include "radial_ring.h"
 #include "icon_lightbulb.h"
 #include "ui_widgets.h"
+#include <string.h>
 
 // Home: a radial dial -- 8 destinations arranged on a ring around a centre
 // hub, per the "TerraPen Dial UI" mockup. The item nearest the top slot is
@@ -77,26 +78,31 @@ namespace
     };
     const int DIAL_ITEM_COUNT = 8;
 
-    const lv_coord_t HUB_SIZE = 82; // holds the selected item's name + machine status
+    // Holds the selected item's name + machine status. Sized so the widest
+    // status word, "CONNECTING", fits across the hub at the status line's
+    // height -- at 82px it was clipped by the hub's curve.
+    const lv_coord_t HUB_SIZE = 96;
 
-    // Ring geometry. Wider, and with a much bigger near/far ratio than the
-    // RadialRing defaults -- which is what the spread buys: at rest the
-    // selected chip is 66px and the bunched pair at the bottom are 24-29px,
-    // so "which one is selected" is answered by size alone from arm's
-    // length.
+    // Ring geometry. The ring sits out near the glass so the face is dial,
+    // not margin: the selected chip is centred in the band between the
+    // hub's rim (radius 48) and the glass (~120), ~5px clear of each. The
+    // spread is gentle: at rest the selected chip is 62px, its neighbours
+    // ~53px and the bottom one 34px, with gaps of 10-20px all the way
+    // round. Size still says which chip is selected, together with the
+    // accent colour.
     //
-    // The near size is capped by the hub, not by the panel: 66 at radius 76
-    // leaves the selected chip 2px clear of the hub's rim and 31px inside
-    // the panel edge. Grow it and the top chip starts covering the hub's
-    // name label.
-    const lv_coord_t RING_RADIUS = 76;
-    const lv_coord_t RING_SIZE_NEAR = 66;
-    const lv_coord_t RING_SIZE_FAR = 24;
+    // A harder spread (it was 0.55, with 24px far chips) made the top
+    // three chips legible at the cost of bunching the rest into a
+    // cluster at the bottom and leaving the band around it empty.
+    const lv_coord_t RING_RADIUS = 84;
+    const lv_coord_t RING_SIZE_NEAR = 62;
+    const lv_coord_t RING_SIZE_FAR = 34;
     const lv_opa_t RING_OPA_FAR = 100;
-    const float RING_SPREAD = 0.55f;
+    const float RING_SPREAD = 0.3f;
 
     RadialRing ring;
     lv_obj_t *statusLbl = nullptr;
+    bool statusPulsing = false;
     lv_obj_t *nameLbl = nullptr;
     lv_obj_t *iconObjs[DIAL_ITEM_COUNT] = {nullptr};
 
@@ -222,6 +228,36 @@ namespace
         ring.openSelected();
     }
 
+    void statusPulseCb(void *obj, int32_t v)
+    {
+        lv_obj_set_style_text_opa((lv_obj_t *)obj, (lv_opa_t)v, 0);
+    }
+
+    // A slow breathe on the status word while the panel is still trying to
+    // reach the plotter, so "CONNECTING" reads as something in progress
+    // rather than a state it has settled into.
+    void setStatusPulsing(bool on)
+    {
+        if (on == statusPulsing) return;
+        statusPulsing = on;
+        lv_anim_del(statusLbl, statusPulseCb);
+        if (!on)
+        {
+            lv_obj_set_style_text_opa(statusLbl, LV_OPA_COVER, 0);
+            return;
+        }
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, statusLbl);
+        lv_anim_set_exec_cb(&a, statusPulseCb);
+        lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_30);
+        lv_anim_set_time(&a, 900);
+        lv_anim_set_playback_time(&a, 900);
+        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+        lv_anim_start(&a);
+    }
+
     const char *textForMode(MachineMode mode)
     {
         switch (mode)
@@ -288,6 +324,12 @@ lv_obj_t *uiDialCreate()
 
     statusLbl = lv_label_create(hub);
     lv_obj_set_style_text_font(statusLbl, &lv_font_montserrat_12, 0);
+    // Pinned to the width the round hub has at this height, so a status
+    // too long to fit scrolls within it instead of being cut off by the
+    // hub's curve. Every current word fits; this is the safety net.
+    lv_obj_set_width(statusLbl, HUB_SIZE - 12);
+    lv_obj_set_style_text_align(statusLbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(statusLbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_align(statusLbl, LV_ALIGN_CENTER, 0, 12);
 
     ring.create(scr, RING_RADIUS, RING_SIZE_NEAR, RING_SIZE_FAR, LV_OPA_COVER, RING_OPA_FAR);
@@ -325,6 +367,10 @@ void uiDialUpdate(const FluidNCStatus &st)
     // The colour still tracks the real mode, so a paused job reads as an
     // amber PROGRESS: where the tap goes hasn't changed, but the machine
     // isn't moving and the ring and the hub should both say so.
-    lv_label_set_text(statusLbl, st.jobActive ? "PROGRESS" : textForMode(st.mode));
+    // Only on a change: setting a scrolling label's text restarts its
+    // scroll, and this runs on every status update.
+    const char *text = st.jobActive ? "PROGRESS" : textForMode(st.mode);
+    if (strcmp(lv_label_get_text(statusLbl), text) != 0) lv_label_set_text(statusLbl, text);
     lv_obj_set_style_text_color(statusLbl, colorForMode(st.mode), 0);
+    setStatusPulsing(!st.jobActive && st.mode == MachineMode::Boot);
 }
