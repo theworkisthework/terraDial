@@ -723,6 +723,13 @@ void FluidNCClient::jog(char axis, float deltaMm, float feedrate)
     // is one nudge away rather than hypothetical.
     if (status_.mode == MachineMode::Homing) return;
 
+    // Settings > Machine > "Swap Z-axis up/down" -- for panels wired to a
+    // pen holder where FluidNC's +Z is physically down. Flipped here, the
+    // single choke point every Z jog passes through (knob jogging on the Z
+    // axis and the Pen screen's up/down control alike), rather than in each
+    // caller.
+    if (axis == 'Z' && Config::get().swapZAxis) deltaMm = -deltaMm;
+
     // Jog cancel (GRBL/FluidNC realtime byte 0x85) first: without it,
     // FluidNC keeps running the previous jog move to completion before a
     // new $J= line takes effect, so alternating commands (knob jogging

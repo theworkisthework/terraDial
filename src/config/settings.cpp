@@ -55,6 +55,7 @@ namespace Config
         settings.invertMenuRotation = prefs.getBool("invMenuRot", false);
         settings.penJogMm = prefs.getFloat("penMm", PEN_JOG_MM);
         settings.penJogFeed = prefs.getFloat("penFeed", PEN_JOG_FEED);
+        settings.swapZAxis = prefs.getBool("swapZAxis", false);
         copyToBuf(settings.wifiSsid, sizeof(settings.wifiSsid), prefs.getString("wifiSsid", WIFI_SSID));
         copyToBuf(settings.wifiPass, sizeof(settings.wifiPass), prefs.getString("wifiPass", WIFI_PASS));
     }
@@ -72,6 +73,7 @@ namespace Config
         prefs.putBool("invMenuRot", settings.invertMenuRotation);
         prefs.putFloat("penMm", settings.penJogMm);
         prefs.putFloat("penFeed", settings.penJogFeed);
+        prefs.putBool("swapZAxis", settings.swapZAxis);
         prefs.putString("wifiSsid", settings.wifiSsid);
         prefs.putString("wifiPass", settings.wifiPass);
     }

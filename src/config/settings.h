@@ -31,6 +31,11 @@ struct AppSettings
     bool invertMenuRotation;
     float penJogMm;
     float penJogFeed; // mm/min
+    // Inverts the direction of every Z jog (knob jogging on the Z axis and
+    // the Pen up/down segmented control both funnel through
+    // FluidNCClient::jog(), which applies this) -- for machines where the
+    // pen/tool holder is mounted such that FluidNC's +Z is physically down.
+    bool swapZAxis;
     char wifiSsid[33];
     char wifiPass[64];
 };

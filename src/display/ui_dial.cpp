@@ -3,6 +3,7 @@
 #include "palette.h"
 #include "radial_ring.h"
 #include "ui_widgets.h"
+#include "../net/terrapixel_client.h"
 #include <string.h>
 
 // Home: a radial dial -- 8 destinations arranged on a ring around a centre
@@ -77,6 +78,31 @@ namespace
     };
     const int DIAL_ITEM_COUNT = 8;
 
+    // Lights only earns a ring slot while terraPixel is actually there to
+    // control -- with no rail-light controller on the network the item
+    // would open a screen that can never do anything, per Settings >
+    // Machine's terraPixel host having nothing to talk to.
+    const int LIGHTS_ITEM_INDEX = 6;
+
+    bool lightsAvailable() { return terraPixel.status().reachable; }
+
+    // The ring position -> DIAL_ITEMS index mapping actually on screen right
+    // now. Rebuilt whenever lightsAvailable() flips, since that's the only
+    // thing that ever changes which items are shown.
+    int activeItems[DIAL_ITEM_COUNT];
+    int activeCount = 0;
+    bool lightsShown = false;
+
+    void buildActiveItems()
+    {
+        activeCount = 0;
+        for (int i = 0; i < DIAL_ITEM_COUNT; i++)
+        {
+            if (i == LIGHTS_ITEM_INDEX && !lightsShown) continue;
+            activeItems[activeCount++] = i;
+        }
+    }
+
     // Holds the selected item's name + machine status. Sized so the widest
     // status word, "CONNECTING", fits across the hub at the status line's
     // height -- at 82px it was clipped by the hub's curve.
@@ -108,22 +134,31 @@ namespace
     // Which icon size each item is currently drawn at -- see uiRingIconSize.
     UiRingIconSize iconSize[DIAL_ITEM_COUNT] = {UiRingIconSmall};
 
+    // Screen the ring's cards are parented to, kept around so a lights-
+    // availability change can rebuild the ring after uiDialCreate() returns.
+    lv_obj_t *dialScreen = nullptr;
+    lv_obj_t *hubObj = nullptr;
+
     void updateNameLabel()
     {
-        lv_label_set_text(nameLbl, DIAL_ITEMS[ring.selectedIndex()].label);
+        lv_label_set_text(nameLbl, DIAL_ITEMS[activeItems[ring.selectedIndex()]].label);
     }
 
     void onSelect(int) { updateNameLabel(); }
 
     void onItemStyle(lv_obj_t *card, int i, float nearness)
     {
+        // `i` is a ring position, not a DIAL_ITEMS index -- Lights can be
+        // absent from the ring, so translate through activeItems first.
+        int idx = activeItems[i];
+
         // Card fades from the raised navy surface up to the red accent as it
         // approaches the top slot; its icon fades from muted to full white
         // so the selected item is unmistakable. E-Stop opts out of both the
         // colour blend and the distance fade -- a dimmed E-Stop would defeat
         // the point of pinning its colour.
         lv_opa_t mix = (lv_opa_t)(255 * nearness);
-        bool alert = DIAL_ITEMS[i].alwaysAlert;
+        bool alert = DIAL_ITEMS[idx].alwaysAlert;
 
         if (alert) lv_obj_set_style_opa(card, LV_OPA_COVER, 0);
         lv_obj_set_style_bg_color(card,
@@ -134,19 +169,21 @@ namespace
         lv_color_t iconColor = alert ? Palette::accentFg()
                                      : lv_color_mix(Palette::accentFg(), Palette::textMuted(), mix);
 
-        UiRingIconSize want = uiRingIconSize(nearness, iconSize[i]);
+        UiRingIconSize want = uiRingIconSize(nearness, iconSize[idx]);
 
-        lv_obj_set_style_text_color(iconObjs[i], iconColor, 0);
+        lv_obj_set_style_text_color(iconObjs[idx], iconColor, 0);
         // A font change forces a label relayout, unlike the plain colour
         // write above -- skip it unless the size bucket actually flipped,
         // since this runs for every item on every animation frame.
-        if (want != iconSize[i])
+        if (want != iconSize[idx])
         {
-            iconSize[i] = want;
-            lv_obj_set_style_text_font(iconObjs[i], uiRingIconFont(want), 0);
+            iconSize[idx] = want;
+            lv_obj_set_style_text_font(iconObjs[idx], uiRingIconFont(want), 0);
         }
     }
 
+    // `index` is a DIAL_ITEMS index, not a ring position -- see makeCard's
+    // call sites, which always pass through activeItems.
     lv_obj_t *makeCard(lv_obj_t *parent, int index)
     {
         lv_obj_t *card = lv_obj_create(parent);
@@ -181,6 +218,29 @@ namespace
     // screen worth jumping to, in which case the tap meant that rather than
     // "open the selected item".
     bool (*onStatusTap)() = nullptr;
+
+    // Set by uiDialSetHandlers; the ring itself is wired to onOpenTrampoline
+    // below so a ring position can be translated back to a stable DIAL_ITEMS
+    // index before reaching ui_nav, which switches on that index.
+    void (*externalOnOpen)(int index) = nullptr;
+
+    void onOpenTrampoline(int ringPos)
+    {
+        if (externalOnOpen) externalOnOpen(activeItems[ringPos]);
+    }
+
+    // Tears down and rebuilds the ring's cards to match activeItems --
+    // needed because RadialRing::clear() deletes the lv_obj a ring position
+    // held, so items can't just be hidden/shown in place.
+    void rebuildRingItems()
+    {
+        buildActiveItems();
+        ring.clear();
+        for (int slot = 0; slot < activeCount; slot++) ring.addItem(makeCard(dialScreen, activeItems[slot]));
+        // New cards are created after the hub, so raise it back above them.
+        lv_obj_move_foreground(hubObj);
+        updateNameLabel();
+    }
 
     void hubTapCb(lv_event_t *e)
     {
@@ -263,11 +323,13 @@ lv_obj_t *uiDialCreate()
 {
     lv_obj_t *scr = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr, Palette::bgApp(), 0);
+    dialScreen = scr;
 
     // Centre hub -- same circular styling as the ring items, just bigger and
     // stationary. Holds the selected item's name (so rotating never hides
     // it behind the top card) and the live machine status.
     lv_obj_t *hub = lv_obj_create(scr);
+    hubObj = hub;
     lv_obj_set_size(hub, HUB_SIZE, HUB_SIZE);
     lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(hub, Palette::bgSecondary(), 0);
@@ -302,7 +364,14 @@ lv_obj_t *uiDialCreate()
     ring.setSpread(RING_SPREAD);
     ring.setOnItemStyle(onItemStyle);
     ring.setOnSelect(onSelect);
-    for (int i = 0; i < DIAL_ITEM_COUNT; i++) ring.addItem(makeCard(scr, i));
+    ring.setOnOpen(onOpenTrampoline);
+
+    // terraPixel's reachability isn't known yet this early in boot (its
+    // first /status poll runs on the network task), so Lights starts
+    // hidden and uiDialUpdate() adds it in once a connection is confirmed.
+    lightsShown = lightsAvailable();
+    buildActiveItems();
+    for (int slot = 0; slot < activeCount; slot++) ring.addItem(makeCard(scr, activeItems[slot]));
 
     // Items are created after the hub, so raise it back above them.
     lv_obj_move_foreground(hub);
@@ -313,7 +382,7 @@ lv_obj_t *uiDialCreate()
 
 void uiDialSetHandlers(void (*onOpen)(int index), bool (*onStatus)())
 {
-    ring.setOnOpen(onOpen);
+    externalOnOpen = onOpen;
     onStatusTap = onStatus;
 }
 
@@ -340,4 +409,13 @@ void uiDialUpdate(const FluidNCStatus &st)
     if (strcmp(lv_label_get_text(statusLbl), text) != 0) lv_label_set_text(statusLbl, text);
     lv_obj_set_style_text_color(statusLbl, colorForMode(st.mode), 0);
     setStatusPulsing(!st.jobActive && st.mode == MachineMode::Boot);
+
+    // Lights only shows on the dial while terraPixel is actually reachable
+    // -- rebuild the ring's cards on the rare change instead of polling.
+    bool wantLights = lightsAvailable();
+    if (wantLights != lightsShown)
+    {
+        lightsShown = wantLights;
+        rebuildRingItems();
+    }
 }

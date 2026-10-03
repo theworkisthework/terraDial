@@ -521,6 +521,13 @@ namespace
         }
     }
 
+    void swapZAxisCb(lv_event_t *e)
+    {
+        lv_obj_t *sw = (lv_obj_t *)lv_event_get_target(e);
+        Config::get().swapZAxis = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        Config::save();
+    }
+
     lv_obj_t *makeMachineCard()
     {
         lv_obj_t *card = makeCardShell("MACHINE");
@@ -562,6 +569,10 @@ namespace
             snprintf(buf, sizeof(buf), "Pen feed: %.0fmm/min", Config::get().penJogFeed);
             lv_label_set_text(penFeedLbl, buf);
         }
+
+        lv_obj_t *swapZRow = uiMakeRow(card, "Reverse Z Axis Direction");
+        lv_obj_t *swapZSw = uiMakeSwitch(swapZRow, Config::get().swapZAxis);
+        lv_obj_add_event_cb(swapZSw, swapZAxisCb, LV_EVENT_VALUE_CHANGED, NULL);
 
         return card;
     }
