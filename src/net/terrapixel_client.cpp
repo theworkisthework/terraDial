@@ -25,9 +25,17 @@ bool TerraPixelClient::ensureResolved()
     lastResolveAttempt_ = now;
 
     HostSpec spec;
-    if (!hostSpecParse(Config::get().terraPixelHost, spec)) return false;
+    if (!hostSpecParse(Config::get().terraPixelHost, spec))
+    {
+        status_.link = TerraPixelLink::NotFound;
+        return false;
+    }
     IPAddress ip = hostSpecResolve(spec, 1500);
-    if (ip == IPAddress((uint32_t)0)) return false;
+    if (ip == IPAddress((uint32_t)0))
+    {
+        status_.link = TerraPixelLink::NotFound;
+        return false;
+    }
 
     resolvedIp_ = ip;
     resolvedPort_ = spec.port ? spec.port : 80;
@@ -56,14 +64,20 @@ bool TerraPixelClient::refreshStatusNow()
     if (!http.begin(baseUrl() + "/status"))
     {
         status_.reachable = false;
+        status_.link = TerraPixelLink::NotFound;
         return false;
     }
 
+    // A negative code is the transport failing -- nothing answered. Any
+    // HTTP status at all means something is listening there, and anything
+    // but 200 with terraPixel's JSON means it isn't terraPixel: most likely
+    // the plotter itself, whose host is easy to type here by mistake.
     int code = http.GET();
     if (code != 200)
     {
         http.end();
         status_.reachable = false;
+        status_.link = code < 0 ? TerraPixelLink::NotFound : TerraPixelLink::WrongDevice;
         haveIp_ = false; // in case terraPixel's IP changed, re-resolve next time
         return false;
     }
@@ -71,9 +85,15 @@ bool TerraPixelClient::refreshStatusNow()
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, http.getStream());
     http.end();
-    if (err)
+    // A 200 that isn't a JSON object with any of the fields read below (a
+    // web page, someone else's JSON) is another device. Any one of them
+    // will do: older terraPixel builds don't send every field.
+    bool looksLikeTerraPixel = doc["mode"].is<const char *>() || doc["brightness"].is<int>() ||
+                               doc["filmMode"].is<bool>() || doc["party"].is<bool>();
+    if (err || !looksLikeTerraPixel)
     {
         status_.reachable = false;
+        status_.link = TerraPixelLink::WrongDevice;
         return false;
     }
 
@@ -85,6 +105,7 @@ bool TerraPixelClient::refreshStatusNow()
     strncpy(status_.mode, mode, sizeof(status_.mode) - 1);
     status_.mode[sizeof(status_.mode) - 1] = '\0';
     status_.reachable = true;
+    status_.link = TerraPixelLink::Connected;
 
     // The UI's controls start from whatever terraPixel already had, rather
     // than from this firmware's defaults -- otherwise the first slider touch
@@ -226,6 +247,7 @@ void TerraPixelClient::update()
         status_ = TerraPixelStatus();
         if (demo)
         {
+            status_.link = TerraPixelLink::Connected;
             status_.reachable = true;
             status_.filmMode = desiredFilm_;
             status_.brightness = desiredBrightness_;
@@ -241,6 +263,28 @@ void TerraPixelClient::update()
     {
         demoUpdate();
         return;
+    }
+
+    // Switched off: forget everything, so switching back on starts clean
+    // rather than showing a stale "Connected" -- and contact nothing, not
+    // even the mDNS lookup a missing terraPixel would cost every 3s.
+    if (!Config::get().terraPixelEnabled)
+    {
+        if (status_.link != TerraPixelLink::Off)
+        {
+            status_ = TerraPixelStatus();
+            haveIp_ = false;
+            seededDesired_ = false;
+            setDirty_ = false;
+            partyPending_ = false;
+        }
+        return;
+    }
+    if (status_.link == TerraPixelLink::Off)
+    {
+        status_.link = TerraPixelLink::Searching;
+        lastResolveAttempt_ = 0;
+        refreshPending_ = true;
     }
 
     if (WiFi.status() != WL_CONNECTED) return;

@@ -235,10 +235,11 @@ def hub(parts, size, lines):
 def screen_home():
     p = []
     head(p)
-    # Must match DIAL_ITEMS in src/display/ui_dial.cpp:
-    # Home XY, Jog, Pen, Jobs, Photo, E-Stop, Lights, Settings.
+    # Must match DIAL_ITEMS in src/display/ui_dial.cpp, as shipped: Home XY,
+    # Jog, Pen, Jobs, Photo, E-Stop, Settings. Lights (between E-Stop and
+    # Settings) only joins the ring once terraPixel is switched on.
     items = [("house", 0), ("move", 0), ("pen", 0), ("card-sim", 0),
-             ("camera", 0), ("octagon-x", 1), ("lightbulb", 0), ("settings", 0)]
+             ("camera", 0), ("octagon-x", 1), ("settings", 0)]
     full_ring(p, items, 0)
     hub(p, DIAL_HUB, [("Home XY", -8, 14, TEXT, "600"), ("IDLE", 12, 12, TEXT_MUTED, "400")])
     tail(p)
@@ -312,24 +313,20 @@ def screen_home_confirm():
 
 
 def screen_lights():
+    # ui_lights.cpp, first screenful: rail status, then Film mode and the two
+    # sliders, left-aligned in their rows. Party sits below, past the back
+    # button. Only on the dial once terraPixel is switched on.
     p = []
     head(p)
-    text(p, 120, 52, "LIGHTS", 12, ACCENT_SECONDARY, "600")
-    circle(p, 96, 72, 5, TEXT_FAINT)
-    text(p, 132, 72, "Rail: IDLE", 12, TEXT_MUTED)
-    rows = [("Panel ring brightness", .6), ("Rail brightness", .8)]
-    y = 92
-    for lbl, frac in rows:
-        text(p, 120, y, lbl, 12, TEXT_MUTED)
-        rect(p, 30, y + 10, 180, 10, 5, BG_PANEL)
-        rect(p, 30, y + 10, 180 * frac, 10, 5, ACCENT)
-        circle(p, 30 + 180 * frac, y + 15, 8, ACCENT_FG)
-        y += 38
-    text(p, 120, y, "Film mode", 12, TEXT_MUTED)
-    rect(p, 98, y + 10, 44, 24, 12, BG_PANEL)
-    circle(p, 110, y + 22, 9, ACCENT_FG)
-    rect(p, 30, y + 44, 180, 30, 15, ACCENT)
-    text(p, 120, y + 59, "Party: OFF", 12, ACCENT_FG, "600")
+    text(p, 120, 50, "LIGHTS", 12, ACCENT_SECONDARY, "600")
+    circle(p, 79, 70, 5, ACCENT_SECONDARY)
+    text(p, 90, 70, "Rail: FOLLOW", 12, TEXT_MUTED, anchor="start")
+    text(p, 32, 88, "Film mode", 12, TEXT_MUTED, anchor="start")
+    switch(p, 96, False)
+    text(p, 32, 134, "Rail brightness", 12, TEXT_MUTED, anchor="start")
+    slider(p, 144, 80)
+    text(p, 32, 168, "Comet width", 12, TEXT_MUTED, anchor="start")
+    slider(p, 178, 35)
     back_button(p)
     tail(p)
     return "lights", p
@@ -372,10 +369,10 @@ def screen_settings_display():
     text(p, 120, 50, "DISPLAY", 12, ACCENT_SECONDARY, "600")
     text(p, 32, 72, "Brightness: 100%", 12, TEXT_MUTED, anchor="start")
     slider(p, 82, 100)
-    text(p, 32, 108, "Idle logo", 12, TEXT_MUTED, anchor="start")
-    switch(p, 118, True)
-    text(p, 32, 158, "Invert menu rotation", 12, TEXT_MUTED, anchor="start")
-    switch(p, 168, False)
+    text(p, 32, 108, "Ring brightness: 60%", 12, TEXT_MUTED, anchor="start")
+    slider(p, 118, 60)
+    text(p, 32, 146, "Idle logo", 12, TEXT_MUTED, anchor="start")
+    switch(p, 156, True)
     back_button(p)
     tail(p)
     return "settings-display", p
@@ -485,12 +482,18 @@ def screen_settings_machine_pen():
 
 
 def screen_settings_machine_terrapixel():
+    # Scrolled to the end, switched on (it ships off, when only the heading
+    # and the switch show): host, live status, and the hint that it's
+    # terraPixel's address and not the plotter's.
     p = []
     head(p)
-    secondary_button(p, 46, "arrow-up-down", "Swap up / down")
-    secondary_button(p, 84, "rotate-ccw", "Reset to defaults")
-    text(p, 120, 132, "TERRAPIXEL", 12, ACCENT_SECONDARY, "600")
-    text_field(p, 152, "Host / IP", "terrapen-leds")
+    text(p, 120, 46, "TERRAPIXEL", 12, ACCENT_SECONDARY, "600")
+    text(p, 32, 64, "Rail lights", 12, TEXT_MUTED, anchor="start")
+    switch(p, 72, True)
+    text_field(p, 110, "Host / IP", "terrapen-leds")
+    text(p, 34, 157, "Connected", 12, GREEN, anchor="start")
+    text(p, 34, 173, "terraPixel's own address --", 12, TEXT_FAINT, anchor="start")
+    text(p, 34, 187, "not the plotter's.", 12, TEXT_FAINT, anchor="start")
     back_button(p)
     tail(p)
     return "settings-machine-terrapixel", p
