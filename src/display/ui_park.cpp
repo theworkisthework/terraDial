@@ -39,6 +39,8 @@ namespace
 
     Phase phase = Phase::Off;
     uint32_t phaseAt = 0;
+    // The pen lift's FluidNCClient ticket; 0 when no lift was sent (alarmed).
+    uint32_t liftTicket = 0;
 
     // Homing has to be observed starting before we can wait for it to end.
     // Without this the sequence would look at the Idle the machine is
@@ -194,8 +196,12 @@ void uiParkTrigger()
     // If the lift can't be sent -- no pen-up command, the machine isn't
     // idle, or the command was dropped -- stop here: homing with the pen down
     // is the exact damage this step exists to prevent.
+    //
+    // Sent isn't enough either: LiftSettle below also waits for FluidNC to
+    // accept it -- see there.
     bool alarmed = (st.mode == MachineMode::Alarm);
-    if (!alarmed && !uiPenLift())
+    liftTicket = alarmed ? 0 : uiPenLift();
+    if (!alarmed && !liftTicket)
     {
         fail(Config::get().penUpCmd[0] ? "Can't lift pen" : "No pen-up command");
         return;
@@ -223,7 +229,31 @@ void uiParkUpdate()
     switch (phase)
     {
         case Phase::LiftSettle:
-            // Both conditions, not either: the settle time alone can expire
+            // FluidNC must have accepted the lift first. The pen-up command is
+            // user-editable, and one it rejects (error:N) leaves the machine
+            // sitting Idle -- the settle check below can't tell that from a
+            // lift that has finished, and would home with the pen down.
+            if (liftTicket)
+            {
+                FluidNCClient::AckState ack = fluidNC.ackState(liftTicket);
+                if (ack == FluidNCClient::AckState::Error)
+                {
+                    fail("Pen-up command rejected");
+                    break;
+                }
+                if (ack == FluidNCClient::AckState::Lost)
+                {
+                    fail("Pen lift lost");
+                    break;
+                }
+                if (ack == FluidNCClient::AckState::Pending)
+                {
+                    if (elapsed >= LIFT_TIMEOUT_MS) fail("No reply to pen lift");
+                    break;
+                }
+            }
+
+            // Then both conditions, not either: the settle time alone can expire
             // while the pen lift is still running, and Idle alone is true for
             // the moment before the lift we just queued has even reached the
             // machine (commands cross to networkTask through a queue).

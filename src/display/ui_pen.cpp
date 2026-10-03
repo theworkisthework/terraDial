@@ -29,9 +29,10 @@ namespace
         lv_obj_set_style_text_color(downLbl, !penIsUp ? Palette::accentFg() : Palette::textMuted(), 0);
     }
 
-    // Returns whether the command was actually sent -- the park sequence
-    // must not go on to home if its pen lift wasn't.
-    bool setPenUp(bool up)
+    // Returns the sent command's ticket (FluidNCClient::sendGcodeLineTracked),
+    // or 0 if nothing was sent -- the park sequence must not go on to home
+    // unless its pen lift was both sent and accepted.
+    uint32_t setPenUp(bool up)
     {
         // Idle (or Done, the post-job flourish that is otherwise idle) only.
         // A pen command isn't a $J= jog, so FluidNC won't refuse it the way
@@ -44,8 +45,8 @@ namespace
         // tap can just be repeated. Alarm and Homing would swallow it, and
         // the segments would then lie.
         const FluidNCStatus &st = fluidNC.status();
-        if (!st.connected || st.jobActive) return false;
-        if (st.mode != MachineMode::Idle && st.mode != MachineMode::Done) return false;
+        if (!st.connected || st.jobActive) return 0;
+        if (st.mode != MachineMode::Idle && st.mode != MachineMode::Done) return 0;
 
         // No "already in that state" early-out: the commands are absolute
         // (Settings > Machine), so re-sending one is harmless -- and tapping
@@ -53,14 +54,15 @@ namespace
         // from elsewhere, or after the up/down commands were swapped.
         const AppSettings &cfg = Config::get();
         const char *cmd = up ? cfg.penUpCmd : cfg.penDownCmd;
-        if (!cmd[0]) return false; // cleared in Settings -- nothing to send
+        if (!cmd[0]) return 0; // cleared in Settings -- nothing to send
         // State follows the send, not the tap: a command dropped on a full
         // queue must leave the segments (and the park sequence) knowing the
         // pen never moved.
-        if (!fluidNC.sendGcodeLine(cmd)) return false;
+        uint32_t ticket = fluidNC.sendGcodeLineTracked(cmd);
+        if (!ticket) return 0;
         penIsUp = up;
         restyleSegments();
-        return true;
+        return ticket;
     }
 
     void upSegCb(lv_event_t *e) { (void)e; setPenUp(true); }
@@ -113,6 +115,6 @@ lv_obj_t *uiPenCreate()
     return shell.screen;
 }
 
-bool uiPenToggle() { return setPenUp(!penIsUp); }
-bool uiPenLift() { return setPenUp(true); }
+bool uiPenToggle() { return setPenUp(!penIsUp) != 0; }
+uint32_t uiPenLift() { return setPenUp(true); }
 bool uiPenIsDown() { return !penIsUp; }

@@ -32,7 +32,7 @@ void FluidNCClient::begin()
     // before this is used -- nothing to do here.
 }
 
-bool FluidNCClient::enqueue(bool raw, const char *text)
+bool FluidNCClient::enqueue(bool raw, const char *text, uint32_t ticket)
 {
     if (!cmdQueue_) return false; // initTransport() not called yet -- nothing to do but drop
     if (strlen(text) > MAX_COMMAND_LEN)
@@ -44,6 +44,7 @@ bool FluidNCClient::enqueue(bool raw, const char *text)
     }
     OutCmd cmd;
     cmd.raw = raw;
+    cmd.ticket = ticket;
     strcpy(cmd.text, text);
     // Never block the UI task waiting for queue space: if the network task
     // is wedged behind a slow socket, dropping a jog/status command is far
@@ -63,8 +64,68 @@ void FluidNCClient::drainCommandQueue()
     while (xQueueReceive(cmdQueue_, &cmd, 0) == pdTRUE)
     {
         if (cmd.raw) sendRaw(cmd.text);
-        else sendLine(String(cmd.text));
+        else
+        {
+            bool sent = sendLine(String(cmd.text));
+            if (cmd.ticket) trackSent(cmd.ticket, sent);
+        }
     }
+}
+
+// Called once a tracked line has been handed to the transport (or failed
+// to be) -- after sendLine() has counted it, and before its reply can be
+// read, which only happens later on this same task (or, in demo, inside
+// the sim call that follows).
+void FluidNCClient::trackSent(uint32_t ticket, bool sent)
+{
+    if (trackedPending_) publishAck(trackedTicket_, AckState::Lost); // superseded
+    trackedPending_ = false;
+    if (!sent)
+    {
+        publishAck(ticket, AckState::Lost);
+        return;
+    }
+    trackedTicket_ = ticket;
+    trackedAckIndex_ = linesSent_;
+    trackedPending_ = true;
+    publishAck(ticket, AckState::Pending);
+}
+
+void FluidNCClient::noteAck(bool ok)
+{
+    acksReceived_++;
+    if (trackedPending_ && acksReceived_ == trackedAckIndex_)
+    {
+        trackedPending_ = false;
+        publishAck(trackedTicket_, ok ? AckState::Ok : AckState::Error);
+    }
+}
+
+// A new channel (or the sim) starts its replies from scratch, and nothing
+// still outstanding on the old one will ever be answered.
+void FluidNCClient::resetAcks()
+{
+    linesSent_ = 0;
+    acksReceived_ = 0;
+    if (trackedPending_) publishAck(trackedTicket_, AckState::Lost);
+    trackedPending_ = false;
+}
+
+uint32_t FluidNCClient::sendGcodeLineTracked(const char *line)
+{
+    // 30 bits, never 0. A wrap would need a billion tracked lines.
+    nextTicket_ = (nextTicket_ + 1) & 0x3FFFFFFF;
+    if (!nextTicket_) nextTicket_ = 1;
+    return enqueue(false, line, nextTicket_) ? nextTicket_ : 0;
+}
+
+FluidNCClient::AckState FluidNCClient::ackState(uint32_t ticket) const
+{
+    uint32_t word = trackedAck_;
+    uint32_t published = word >> 2;
+    if (published == ticket) return (AckState)(word & 3);
+    // Not reached the transport yet, or already superseded by a later one.
+    return published < ticket ? AckState::Pending : AckState::Lost;
 }
 
 bool FluidNCClient::fileListReady() const
@@ -246,6 +307,7 @@ void FluidNCClient::enterDemo()
     status_.connected = true;
     lineLen_ = 0;
     homePending_ = false;
+    resetAcks();
     sim_.reset();
     demoActive_ = true;
     fileListRequested_ = true; // whatever folder Jobs is in, from the demo card
@@ -257,6 +319,7 @@ void FluidNCClient::leaveDemo()
     status_ = FluidNCStatus(); // disconnected, until the real machine answers
     lineLen_ = 0;
     homePending_ = false;
+    resetAcks();
     demoActive_ = false;
     lastResolveAttempt_ = 0; // reconnect straight away
     // Replace the demo card's listing with an empty one, so no demo entry
@@ -281,7 +344,16 @@ void FluidNCClient::demoUpdate()
     servicePendingHome(); // may enqueue, so before the drain
     OutCmd cmd;
     while (cmdQueue_ && xQueueReceive(cmdQueue_, &cmd, 0) == pdTRUE)
+    {
+        // Counted before the sim runs it: the sim replies synchronously,
+        // from inside command().
+        if (!cmd.raw)
+        {
+            linesSent_++;
+            if (cmd.ticket) trackSent(cmd.ticket, true);
+        }
         sim_.command(cmd.raw, cmd.text, simSink, this);
+    }
     sim_.tick(simSink, this);
 
     if (fileListRequested_)
@@ -437,6 +509,7 @@ void FluidNCClient::onWsEvent(uint8_t type, uint8_t *payload, size_t length)
             Serial.println("[fluidnc] websocket connected");
             status_.connected = true;
             lineLen_ = 0; // never glue a fresh connection onto a half-received line
+            resetAcks();
             // Re-issued on every (re)connect -- auto-reporting is per-channel
             // and FluidNC forgets it across disconnects.
             sendLine("$Report/Interval=100");
@@ -453,6 +526,7 @@ void FluidNCClient::onWsEvent(uint8_t type, uint8_t *payload, size_t length)
             status_.mode = MachineMode::Boot;
             status_.havePos = false;
             lineLen_ = 0;
+            resetAcks();
             break;
 
         // A whole message ends a line even without a trailing newline:
@@ -489,14 +563,16 @@ void FluidNCClient::sendRaw(const char *s)
     wsClient.sendTXT(s);
 }
 
-void FluidNCClient::sendLine(const String &line)
+bool FluidNCClient::sendLine(const String &line)
 {
     if (!status_.connected)
     {
         Serial.printf("[fluidnc] sendLine(\"%s\") dropped -- not connected\n", line.c_str());
-        return;
+        return false;
     }
+    linesSent_++; // every line gets exactly one ok/error back -- see noteAck()
     wsClient.sendTXT(line + "\n");
+    return true;
 }
 
 void FluidNCClient::endLine()
@@ -584,13 +660,16 @@ void FluidNCClient::handleLine(char *line)
         !strncmp(line, "ACTIVE_ID:", 10))
         return;
 
-    // Everything that isn't a status report is an ack: "ok", "error:N",
-    // "ALARM:N" or an "[MSG:...]". Nothing here parses them, but they are
-    // the only place FluidNC says *why* something failed, so at least put
-    // them on the serial log rather than dropping them silently.
+    // Everything that isn't a status report is a reply or a message: "ok",
+    // "error:N", "ALARM:N" or an "[MSG:...]". ok/error are counted against
+    // the lines sent (noteAck). Everything but ok is also the only place
+    // FluidNC says *why* something failed, so it goes to the serial log
+    // rather than being dropped silently.
     if (line[0] != '<')
     {
-        if (strncmp(line, "ok", 2) != 0)
+        bool ok = !strncmp(line, "ok", 2);
+        if (ok || !strncmp(line, "error:", 6)) noteAck(ok);
+        if (!ok)
         {
             Serial.printf("[fluidnc] %s\n", line);
             noteMessage(line);

@@ -114,6 +114,25 @@ public:
     bool deleteFile(const char *path);                  // $SD/Delete=<path>
     bool sendGcodeLine(const char *line);                // arbitrary line (pen macros, etc.); false if dropped
 
+    // A line whose reply can be followed: FluidNC answers every line, in
+    // order, with "ok" or "error:N", so counting lines out and replies in
+    // pairs each reply with its line. For anything that must not carry on
+    // until the machine has accepted a command -- the park sequence won't
+    // home until its pen lift is acknowledged, because a typo in the
+    // (user-editable) pen-up command gets error:N while the machine sits
+    // Idle, which looked exactly like a lift that had finished.
+    //
+    // One line is tracked at a time; tracking a new one supersedes the old,
+    // which then reads Lost. Lost also covers a line that never left (not
+    // connected) or whose reply can't arrive (the connection dropped, or
+    // demo mode switched over). If another client's replies ever reached
+    // this channel the count would drift -- FluidNC answers each channel
+    // separately, so they don't, and a drift that loses replies only ever
+    // leaves a line Pending, i.e. the caller times out.
+    enum class AckState : uint8_t { Pending, Ok, Error, Lost };
+    uint32_t sendGcodeLineTracked(const char *line);     // ticket, or 0 if dropped
+    AckState ackState(uint32_t ticket) const;
+
     // FluidNC reads a command into a 255-byte buffer (Channel::maxLine,
     // v4.0.3), so the longest line it accepts is 254 characters. A longer
     // one would be cut short and run or delete a different path -- or
@@ -201,6 +220,7 @@ private:
     struct OutCmd
     {
         bool raw;
+        uint32_t ticket; // non-zero: a tracked line, see sendGcodeLineTracked()
         char text[MAX_COMMAND_LEN + 1];
     };
     static const int CMD_QUEUE_DEPTH = 12;
@@ -215,7 +235,23 @@ private:
     // False if the command was dropped (too long, queue full, or no
     // transport yet) -- most callers can ignore it, but anything that acts
     // on a command having been sent (the park sequence's pen lift) can't.
-    bool enqueue(bool raw, const char *text);
+    bool enqueue(bool raw, const char *text, uint32_t ticket = 0);
+
+    // Reply tracking (see sendGcodeLineTracked). networkTask only, except
+    // nextTicket_ (UI task only) and trackedAck_, written by networkTask and
+    // read by the UI task as a single word -- the tracked ticket << 2 | its
+    // AckState -- so a reader can never pair one ticket with another's state.
+    uint32_t linesSent_ = 0;
+    uint32_t acksReceived_ = 0;
+    uint32_t trackedTicket_ = 0;
+    uint32_t trackedAckIndex_ = 0; // which reply, counting from the connection's first, is the tracked line's
+    bool trackedPending_ = false;
+    uint32_t nextTicket_ = 0;
+    volatile uint32_t trackedAck_ = 0;
+    void publishAck(uint32_t ticket, AckState st) { trackedAck_ = (ticket << 2) | (uint32_t)st; }
+    void trackSent(uint32_t ticket, bool sent);
+    void noteAck(bool ok);
+    void resetAcks();
     void drainCommandQueue();
     void servicePendingHome();
 
@@ -225,7 +261,7 @@ private:
     void fetchFileList();
     void endLine();
     void sendRaw(const char *s);
-    void sendLine(const String &line);
+    bool sendLine(const String &line);
     void ingest(const char *data, size_t len);
     void handleLine(char *line);
     void applyState(const char *state);
