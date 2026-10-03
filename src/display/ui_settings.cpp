@@ -16,6 +16,7 @@
 #include "version.h"
 #include "../net/ota_updater.h"
 #include "../net/demo_mode.h"
+#include "../led/panel_ring.h"
 #include <WiFi.h>
 #include <stdio.h>
 #include <string.h>
@@ -616,6 +617,110 @@ namespace
         penResetBtn = makeSecondaryButton(card, PEN_RESET_TEXT, penResetCb, &penResetLbl);
     }
 
+    // ---- terraPixel: an optional extra, switched on here ----
+    // Off by default -- most machines have no terraPixel. While off, the
+    // host field and its status are hidden, nothing contacts terraPixel,
+    // and the dial drops its Lights item (ui_dial.cpp).
+    lv_obj_t *tpDetails = nullptr;
+    lv_obj_t *tpStatusLbl = nullptr;
+
+    // Hosts equal apart from case and an mDNS ".local" suffix, which is
+    // optional on both fields.
+    bool sameHost(const char *a, const char *b)
+    {
+        size_t la = strlen(a), lb = strlen(b);
+        if (la > 6 && !strcasecmp(a + la - 6, ".local")) la -= 6;
+        if (lb > 6 && !strcasecmp(b + lb - 6, ".local")) lb -= 6;
+        return la && la == lb && !strncasecmp(a, b, la);
+    }
+
+    // The likeliest wrong entry is the plotter's own address -- the dial
+    // talks to that, so it reads like the obvious answer. Said outright
+    // rather than left to show up as "Not a terraPixel".
+    void refreshTpStatus()
+    {
+        if (!tpStatusLbl) return;
+        const AppSettings &cfg = Config::get();
+        const char *text = "Searching...";
+        lv_color_t col = Palette::textMuted();
+        if (sameHost(cfg.terraPixelHost, cfg.fluidNcHost))
+        {
+            text = "That's your plotter's address";
+            col = Palette::accent();
+        }
+        else
+        {
+            switch (terraPixel.status().link)
+            {
+                case TerraPixelLink::Connected:
+                    text = "Connected";
+                    col = lv_color_hex(0x3ddc84); // the dial's Run/Done green
+                    break;
+                case TerraPixelLink::NotFound:
+                    text = "Not found";
+                    col = Palette::accent();
+                    break;
+                case TerraPixelLink::WrongDevice:
+                    text = "Not a terraPixel";
+                    col = Palette::accent();
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (strcmp(lv_label_get_text(tpStatusLbl), text) != 0) lv_label_set_text(tpStatusLbl, text);
+        lv_obj_set_style_text_color(tpStatusLbl, col, 0);
+    }
+
+    void tpEnabledCb(lv_event_t *e)
+    {
+        lv_obj_t *sw = lv_event_get_target(e);
+        bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
+        Config::get().terraPixelEnabled = on;
+        Config::save();
+        if (on) lv_obj_clear_flag(tpDetails, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(tpDetails, LV_OBJ_FLAG_HIDDEN);
+        refreshTpStatus();
+    }
+
+    void addTerraPixelControls(lv_obj_t *card)
+    {
+        makeSectionHeader(card, "TERRAPIXEL");
+
+        lv_obj_t *row = uiMakeRow(card, "Rail lights");
+        lv_obj_t *sw = uiMakeSwitch(row, Config::get().terraPixelEnabled);
+        lv_obj_add_event_cb(sw, tpEnabledCb, LV_EVENT_VALUE_CHANGED, NULL);
+
+        // Everything that only means something once switched on, in one
+        // container so the switch can show or hide it as a unit.
+        tpDetails = lv_obj_create(card);
+        lv_obj_set_size(tpDetails, lv_pct(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(tpDetails, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(tpDetails, 0, 0);
+        lv_obj_set_style_pad_all(tpDetails, 0, 0);
+        lv_obj_set_style_pad_row(tpDetails, 6, 0);
+        lv_obj_clear_flag(tpDetails, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(tpDetails, LV_FLEX_FLOW_COLUMN);
+        if (!Config::get().terraPixelEnabled) lv_obj_add_flag(tpDetails, LV_OBJ_FLAG_HIDDEN);
+
+        lv_obj_t *tpField = uiMakeTextField(tpDetails, "Host / IP", &tpHostLbl);
+        lv_obj_add_event_cb(tpField, tpHostCb, LV_EVENT_CLICKED, NULL);
+
+        tpStatusLbl = lv_label_create(tpDetails);
+        lv_label_set_text(tpStatusLbl, "");
+        lv_obj_set_style_text_font(tpStatusLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_pad_left(tpStatusLbl, 2, 0); // in line with the field's caption
+        refreshTpStatus();
+
+        lv_obj_t *hint = lv_label_create(tpDetails);
+        lv_label_set_text(hint, "terraPixel's own address -- not the plotter's.");
+        lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(hint, lv_pct(100));
+        lv_obj_set_style_pad_left(hint, 2, 0);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_color(hint, Palette::textFaint(), 0);
+    }
+
     lv_obj_t *makeMachineCard()
     {
         lv_obj_t *card = makeCardShell("MACHINE");
@@ -629,9 +734,7 @@ namespace
 
         addPenControls(card);
 
-        makeSectionHeader(card, "TERRAPIXEL");
-        lv_obj_t *tpField = uiMakeTextField(card, "Host / IP", &tpHostLbl);
-        lv_obj_add_event_cb(tpField, tpHostCb, LV_EVENT_CLICKED, NULL);
+        addTerraPixelControls(card);
         refreshHostLabels();
 
         return card;
@@ -640,6 +743,20 @@ namespace
     // ---- Display card (brightness, menu direction, screen sleep) ----
     lv_obj_t *sleepLedLbl = nullptr;
     lv_obj_t *brightLbl = nullptr;
+    lv_obj_t *ringBrightLbl = nullptr;
+
+    void ringBrightSliderCb(lv_event_t *e)
+    {
+        lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(e);
+        int v = lv_slider_get_value(slider);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Ring brightness: %d%%", v);
+        lv_label_set_text(ringBrightLbl, buf);
+        // Live, like the backlight -- you're looking at the ring as you drag.
+        Config::get().ringBrightnessPct = (uint8_t)v;
+        panelRing.setBrightness((uint8_t)v);
+        if (lv_event_get_code(e) == LV_EVENT_RELEASED) Config::save();
+    }
 
     void brightSliderCb(lv_event_t *e)
     {
@@ -728,6 +845,21 @@ namespace
             char buf[24];
             snprintf(buf, sizeof(buf), "Brightness: %d%%", Config::get().backlightBrightnessPct);
             lv_label_set_text(brightLbl, buf);
+        }
+
+        // The panel's own LED ring, under the screen's brightness. Not
+        // terraPixel's rail -- that's on the Lights screen.
+        lv_obj_t *ringRow = uiMakeRow(card);
+        ringBrightLbl = lv_label_create(ringRow);
+        lv_obj_set_style_text_font(ringBrightLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_color(ringBrightLbl, Palette::textMuted(), 0);
+        lv_obj_t *ringSlider = uiMakeSlider(ringRow, 0, 100, Config::get().ringBrightnessPct);
+        lv_obj_add_event_cb(ringSlider, ringBrightSliderCb, LV_EVENT_VALUE_CHANGED, NULL);
+        lv_obj_add_event_cb(ringSlider, ringBrightSliderCb, LV_EVENT_RELEASED, NULL);
+        {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "Ring brightness: %d%%", Config::get().ringBrightnessPct);
+            lv_label_set_text(ringBrightLbl, buf);
         }
 
         lv_obj_t *logoRow = uiMakeRow(card, "Idle logo");
@@ -1252,4 +1384,5 @@ void uiSettingsUpdate()
     lv_label_set_text(aboutUptimeLbl, buf);
 
     refreshUpdateWidgets();
+    refreshTpStatus();
 }

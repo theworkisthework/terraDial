@@ -1,6 +1,5 @@
 #include "ui_lights.h"
 #include "../net/terrapixel_client.h"
-#include "../led/panel_ring.h"
 #include "palette.h"
 #include "ui_screen_shell.h"
 #include "ui_widgets.h"
@@ -11,7 +10,6 @@ namespace
     lv_obj_t *lightsPanel = nullptr; // the scrollable page, for knob scrolling
     lv_obj_t *connDot = nullptr;
     lv_obj_t *railModeLabel = nullptr;
-    lv_obj_t *panelSlider = nullptr;
     lv_obj_t *filmSwitch = nullptr;
     lv_obj_t *railBrightSlider = nullptr;
     lv_obj_t *radiusSlider = nullptr;
@@ -19,13 +17,6 @@ namespace
     lv_obj_t *partyBtnLbl = nullptr;
 
     bool suppressEvents = false; // true while we're programmatically syncing widgets
-
-    void panelSliderCb(lv_event_t *e)
-    {
-        (void)e;
-        if (suppressEvents) return;
-        panelRing.setBrightness((uint8_t)lv_slider_get_value(panelSlider));
-    }
 
     void filmSwitchCb(lv_event_t *e)
     {
@@ -96,12 +87,9 @@ lv_obj_t *uiLightsCreate()
     lv_obj_set_style_text_color(railModeLabel, Palette::textMuted(), 0);
     lv_obj_set_style_pad_left(railModeLabel, 6, 0);
 
-    // -- panel ring (local, always available) --
-    lv_obj_t *panelRow = uiMakeRow(panel, "Panel ring brightness");
-    panelSlider = uiMakeSlider(panelRow, 0, 100, panelRing.brightness());
-    lv_obj_add_event_cb(panelSlider, panelSliderCb, LV_EVENT_VALUE_CHANGED, NULL);
-
-    // -- terraPixel rail --
+    // terraPixel's rail only. The panel's own LED ring brightness used to
+    // be here too; it's under Settings > Display now, since this screen is
+    // only on the dial when terraPixel is switched on.
     lv_obj_t *filmRow = uiMakeRow(panel, "Film mode");
     filmSwitch = uiMakeSwitch(filmRow, false);
     lv_obj_add_event_cb(filmSwitch, filmSwitchCb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -138,8 +126,6 @@ void uiLightsOnShow()
     const TerraPixelStatus &st = terraPixel.status();
 
     suppressEvents = true;
-
-    lv_slider_set_value(panelSlider, panelRing.brightness(), LV_ANIM_OFF);
 
     if (st.reachable)
     {

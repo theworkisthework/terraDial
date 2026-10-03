@@ -243,7 +243,8 @@ static void networkTask(void *)
 // machine was idle, to spare jobs, but idle is exactly when a pen tap or the
 // next jog is sent, so those waited in the queue for up to 1.5s. Here a
 // stalled light request delays nothing but the lights, and they needn't
-// wait for the machine to stop moving either.
+// wait for the machine to stop moving either. With terraPixel switched off
+// in Settings, update() returns straight away and nothing is contacted.
 static void lightsTask(void *)
 {
     for (;;)
@@ -277,6 +278,7 @@ void setup()
     UiNav::begin();
 
     panelRing.begin();
+    panelRing.setBrightness(Config::get().ringBrightnessPct);
     panelRing.setMode(MachineMode::Boot);
 
     backlightInit();

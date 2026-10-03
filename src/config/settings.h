@@ -12,6 +12,11 @@
 struct AppSettings
 {
     char fluidNcHost[32];
+    // terraPixel rail lights are an optional extra, off unless switched on
+    // in Settings > Machine. Off, nothing talks to terraPixel and the dial
+    // has no Lights item. The host keeps its default either way, so a
+    // terraPixel on its default name just works once switched on.
+    bool terraPixelEnabled;
     char terraPixelHost[32];
     // Idle seconds before the panel sleeps (backlight off). 0 = never.
     // Replaced an older "dim the backlight" timeout -- see
@@ -21,6 +26,10 @@ struct AppSettings
     // LED ring brightness while asleep: the ring keeps showing machine state
     // across the room once the screen is dark.
     uint8_t sleepLedBrightnessPct;
+    // LED ring brightness while awake. Lived on the Lights screen, unsaved,
+    // until Lights became optional (terraPixel) -- it's the panel's own
+    // ring, so it belongs with the display settings regardless.
+    uint8_t ringBrightnessPct;
     // Show the terraPen mark after a shorter spell of inactivity, before the
     // panel sleeps proper (see display/ui_brand.h).
     bool showIdleLogo;

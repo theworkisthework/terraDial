@@ -47,10 +47,12 @@ namespace Config
         prefs.begin("terratouch", false);
 
         copyToBuf(settings.fluidNcHost, sizeof(settings.fluidNcHost), prefs.getString("fncHost", FLUIDNC_HOST));
+        settings.terraPixelEnabled = prefs.getBool("tpEnabled", false);
         copyToBuf(settings.terraPixelHost, sizeof(settings.terraPixelHost), prefs.getString("tpHost", TERRAPIXEL_HOST));
         settings.sleepTimeoutSec = prefs.getUShort("sleepSec", 300); // 5 min
         settings.backlightBrightnessPct = prefs.getUChar("blBright", 100);
         settings.sleepLedBrightnessPct = prefs.getUChar("sleepLed", 50);
+        settings.ringBrightnessPct = prefs.getUChar("ringBright", 60);
         settings.showIdleLogo = prefs.getBool("idleLogo", true);
         settings.invertMenuRotation = prefs.getBool("invMenuRot", false);
         copyToBuf(settings.penUpCmd, sizeof(settings.penUpCmd), prefs.getString("penUpCmd", PEN_UP_CMD));
@@ -64,10 +66,12 @@ namespace Config
     void save()
     {
         prefs.putString("fncHost", settings.fluidNcHost);
+        prefs.putBool("tpEnabled", settings.terraPixelEnabled);
         prefs.putString("tpHost", settings.terraPixelHost);
         prefs.putUShort("sleepSec", settings.sleepTimeoutSec);
         prefs.putUChar("blBright", settings.backlightBrightnessPct);
         prefs.putUChar("sleepLed", settings.sleepLedBrightnessPct);
+        prefs.putUChar("ringBright", settings.ringBrightnessPct);
         prefs.putBool("idleLogo", settings.showIdleLogo);
         prefs.putBool("invMenuRot", settings.invertMenuRotation);
         prefs.putString("penUpCmd", settings.penUpCmd);
