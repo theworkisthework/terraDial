@@ -29,15 +29,23 @@ namespace
         lv_obj_set_style_text_color(downLbl, !penIsUp ? Palette::accentFg() : Palette::textMuted(), 0);
     }
 
-    void setPenUp(bool up)
+    // Returns whether the command was actually sent -- the park sequence
+    // must not go on to home if its pen lift wasn't.
+    bool setPenUp(bool up)
     {
-        // A pen command isn't a $J= jog, so FluidNC won't refuse it mid-plot
-        // the way it did the old relative jog -- it would land in the middle
-        // of the job's own pen moves. Refuse it here instead. Not on plain
-        // Run: FluidNC reports that for our own pen move too, and up-then-
-        // down in quick succession should just queue.
+        // Idle (or Done, the post-job flourish that is otherwise idle) only.
+        // A pen command isn't a $J= jog, so FluidNC won't refuse it the way
+        // it refused the old relative jog unless idle or jogging: sent during
+        // Run it is queued into whatever is running -- a job streamed from
+        // terraForge, which jobActive can't see (that only covers SD files),
+        // or another client's moves. Run also covers our own previous pen
+        // move, so a second tap before it finishes is dropped; penIsUp only
+        // changes on a send, so the segments still show the truth and the
+        // tap can just be repeated. Alarm and Homing would swallow it, and
+        // the segments would then lie.
         const FluidNCStatus &st = fluidNC.status();
-        if (st.jobActive || st.mode == MachineMode::Hold) return;
+        if (!st.connected || st.jobActive) return false;
+        if (st.mode != MachineMode::Idle && st.mode != MachineMode::Done) return false;
 
         // No "already in that state" early-out: the commands are absolute
         // (Settings > Machine), so re-sending one is harmless -- and tapping
@@ -45,10 +53,11 @@ namespace
         // from elsewhere, or after the up/down commands were swapped.
         const AppSettings &cfg = Config::get();
         const char *cmd = up ? cfg.penUpCmd : cfg.penDownCmd;
-        if (!cmd[0]) return; // cleared in Settings -- nothing to send
+        if (!cmd[0]) return false; // cleared in Settings -- nothing to send
         penIsUp = up;
         fluidNC.sendGcodeLine(cmd);
         restyleSegments();
+        return true;
     }
 
     void upSegCb(lv_event_t *e) { (void)e; setPenUp(true); }
@@ -101,5 +110,5 @@ lv_obj_t *uiPenCreate()
     return shell.screen;
 }
 
-void uiPenToggle() { setPenUp(!penIsUp); }
+bool uiPenToggle() { return setPenUp(!penIsUp); }
 bool uiPenIsDown() { return !penIsUp; }

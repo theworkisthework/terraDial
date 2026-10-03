@@ -185,8 +185,16 @@ void uiParkTrigger()
     // -- the lift would be swallowed and we would sit waiting for motion that
     // was never going to happen. home() unlocks before it homes anyway, and a
     // pen that is already clear of the bed is the common case after a plot.
+    //
+    // If the lift can't be sent -- an empty pen-up command, or the machine
+    // isn't idle -- stop here: homing with the pen down is the exact damage
+    // this step exists to prevent.
     bool alarmed = (st.mode == MachineMode::Alarm);
-    if (!alarmed && uiPenIsDown()) uiPenToggle();
+    if (!alarmed && uiPenIsDown() && !uiPenToggle())
+    {
+        fail("Can't lift pen");
+        return;
+    }
 
     setPhase(Phase::LiftSettle);
     setStatus(alarmed ? "Unlocking..." : "Lifting pen...");
