@@ -1,6 +1,7 @@
 #include "ui_settings.h"
 #include "lucide_icons.h"
 #include "../config/settings.h"
+#include "jog_config.h" // PEN_UP_CMD / PEN_DOWN_CMD, for Reset to defaults
 #include "../net/wifi_manager.h"
 #include "../net/fluidnc_client.h"
 #include "../net/terrapixel_client.h"
@@ -117,6 +118,20 @@ namespace
         lv_obj_t *card = uiMakePanel(screenRoot, title);
         lv_obj_add_flag(card, LV_OBJ_FLAG_HIDDEN);
         return card;
+    }
+
+    // A heading partway down a card, in the same style as the card's own
+    // title, splitting it into sections.
+    void makeSectionHeader(lv_obj_t *card, const char *text)
+    {
+        lv_obj_t *hdr = lv_label_create(card);
+        lv_label_set_text(hdr, text);
+        // Extra space above, on top of the panel's 8px row gap, so each
+        // section reads as its own group. Padding rather than a margin --
+        // LVGL 8 has no margin styles.
+        lv_obj_set_style_pad_top(hdr, 10, 0);
+        lv_obj_set_style_text_font(hdr, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_color(hdr, Palette::accentSecondary(), 0);
     }
 
     // ---- Wi-Fi card ----
@@ -450,19 +465,16 @@ namespace
         return card;
     }
 
-    // ---- Machine card (FluidNC/terraPixel hosts, pen jog) ----
+    // ---- Machine card (FluidNC/terraPixel hosts, pen commands) ----
     lv_obj_t *fncHostLbl = nullptr;
     lv_obj_t *tpHostLbl = nullptr;
-    lv_obj_t *penMmLbl = nullptr;
-    lv_obj_t *penFeedLbl = nullptr;
+    lv_obj_t *penUpLbl = nullptr;
+    lv_obj_t *penDownLbl = nullptr;
 
     void refreshHostLabels()
     {
-        char buf[40];
-        snprintf(buf, sizeof(buf), "FluidNC: %s", Config::get().fluidNcHost);
-        lv_label_set_text(fncHostLbl, buf);
-        snprintf(buf, sizeof(buf), "terraPixel: %s", Config::get().terraPixelHost);
-        lv_label_set_text(tpHostLbl, buf);
+        lv_label_set_text(fncHostLbl, Config::get().fluidNcHost);
+        lv_label_set_text(tpHostLbl, Config::get().terraPixelHost);
     }
 
     // Applied immediately: without the hostChanged() nudge the clients kept
@@ -488,80 +500,139 @@ namespace
     void tpHostCb(lv_event_t *e)
     {
         (void)e;
-        openEditor(Config::get().terraPixelHost, sizeof(Config::get().terraPixelHost), tpHostSaved, false, nullptr, "LED host");
+        openEditor(Config::get().terraPixelHost, sizeof(Config::get().terraPixelHost), tpHostSaved, false, nullptr, "terraPixel host");
     }
 
-    void penMmSliderCb(lv_event_t *e)
+    // ---- pen up/down commands ----
+    // The G-code the Pen screen sends for each state -- the same pair
+    // terraForge keeps per machine. Swapping exchanges the two strings
+    // rather than inverting anything, so a machine whose pen lifts on -Z
+    // (or a servo/solenoid driven by M-codes) is set up by what the
+    // commands say, and the values are never rewritten behind your back.
+    void refreshPenCmdLabels()
     {
-        lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(e);
-        float mm = lv_slider_get_value(slider) / 10.0f;
-        char buf[24];
-        snprintf(buf, sizeof(buf), "Pen jog: %.1fmm", mm);
-        lv_label_set_text(penMmLbl, buf);
-
-        if (lv_event_get_code(e) == LV_EVENT_RELEASED)
-        {
-            Config::get().penJogMm = mm;
-            Config::save();
-        }
+        const AppSettings &cfg = Config::get();
+        lv_label_set_text(penUpLbl, cfg.penUpCmd[0] ? cfg.penUpCmd : "(none)");
+        lv_label_set_text(penDownLbl, cfg.penDownCmd[0] ? cfg.penDownCmd : "(none)");
     }
 
-    void penFeedSliderCb(lv_event_t *e)
+    void penUpCmdCb(lv_event_t *e)
     {
-        lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(e);
-        int feed = lv_slider_get_value(slider);
-        char buf[28];
-        snprintf(buf, sizeof(buf), "Pen feed: %dmm/min", feed);
-        lv_label_set_text(penFeedLbl, buf);
+        (void)e;
+        openEditor(Config::get().penUpCmd, sizeof(Config::get().penUpCmd), refreshPenCmdLabels, false, nullptr, "Pen up");
+    }
 
-        if (lv_event_get_code(e) == LV_EVENT_RELEASED)
+    void penDownCmdCb(lv_event_t *e)
+    {
+        (void)e;
+        openEditor(Config::get().penDownCmd, sizeof(Config::get().penDownCmd), refreshPenCmdLabels, false, nullptr, "Pen down");
+    }
+
+    void penSwapCb(lv_event_t *e)
+    {
+        (void)e;
+        AppSettings &cfg = Config::get();
+        char tmp[sizeof(cfg.penUpCmd)];
+        strcpy(tmp, cfg.penUpCmd);
+        strcpy(cfg.penUpCmd, cfg.penDownCmd);
+        strcpy(cfg.penDownCmd, tmp);
+        Config::save();
+        refreshPenCmdLabels();
+    }
+
+    // ---- Reset to defaults ----
+    // Two taps, like Forget network: terraForge's reset only touches an
+    // unsaved form, but here every change saves at once, and a macro typed
+    // out on the radial keyboard is too slow to re-enter to lose to a
+    // stray tap.
+    const uint32_t PEN_RESET_ARM_MS = 3000;
+    const char *PEN_RESET_TEXT = LUCIDE_ROTATE_CCW " Reset to defaults";
+    lv_obj_t *penResetBtn = nullptr;
+    lv_obj_t *penResetLbl = nullptr;
+    lv_timer_t *penResetArmTimer = nullptr;
+
+    void disarmPenReset()
+    {
+        if (penResetArmTimer)
         {
-            Config::get().penJogFeed = (float)feed;
-            Config::save();
+            lv_timer_del(penResetArmTimer);
+            penResetArmTimer = nullptr;
         }
+        lv_obj_set_style_bg_color(penResetBtn, Palette::bgSecondary(), 0);
+        lv_label_set_text(penResetLbl, PEN_RESET_TEXT);
+    }
+
+    void penResetCb(lv_event_t *e)
+    {
+        (void)e;
+        if (!penResetArmTimer)
+        {
+            lv_obj_set_style_bg_color(penResetBtn, Palette::alert(), 0);
+            lv_label_set_text(penResetLbl, "Tap again to reset");
+            penResetArmTimer = lv_timer_create([](lv_timer_t *) { disarmPenReset(); }, PEN_RESET_ARM_MS, nullptr);
+            lv_timer_set_repeat_count(penResetArmTimer, 1);
+            return;
+        }
+
+        disarmPenReset();
+        AppSettings &cfg = Config::get();
+        strncpy(cfg.penUpCmd, PEN_UP_CMD, sizeof(cfg.penUpCmd) - 1);
+        cfg.penUpCmd[sizeof(cfg.penUpCmd) - 1] = '\0';
+        strncpy(cfg.penDownCmd, PEN_DOWN_CMD, sizeof(cfg.penDownCmd) - 1);
+        cfg.penDownCmd[sizeof(cfg.penDownCmd) - 1] = '\0';
+        Config::save();
+        refreshPenCmdLabels();
+    }
+
+    // terraForge's "secondary" button: the raised sea-blue surface rather
+    // than uiMakeButton's accent fill, with an icon leading the text.
+    lv_obj_t *makeSecondaryButton(lv_obj_t *parent, const char *text, lv_event_cb_t cb, lv_obj_t **outLabel = nullptr)
+    {
+        lv_obj_t *lbl = nullptr;
+        lv_obj_t *btn = uiMakeButton(parent, text, &lbl);
+        lv_obj_set_style_bg_color(btn, Palette::bgSecondary(), 0);
+        lv_obj_set_style_bg_color(btn, Palette::bgSecondaryHover(), LV_STATE_PRESSED);
+        lv_obj_set_style_text_font(lbl, &lucide_12, 0); // icon + text
+        lv_obj_set_style_text_color(lbl, Palette::text(), 0);
+        lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
+        if (outLabel) *outLabel = lbl;
+        return btn;
+    }
+
+    void addPenControls(lv_obj_t *card)
+    {
+        makeSectionHeader(card, "PEN");
+
+        lv_obj_t *upField = uiMakeTextField(card, "Pen up command", &penUpLbl);
+        lv_obj_add_event_cb(upField, penUpCmdCb, LV_EVENT_CLICKED, NULL);
+        lv_obj_t *downField = uiMakeTextField(card, "Pen down command", &penDownLbl);
+        lv_obj_add_event_cb(downField, penDownCmdCb, LV_EVENT_CLICKED, NULL);
+        refreshPenCmdLabels();
+
+        // terraForge's two secondary buttons, under the fields they act
+        // on. Stacked rather than side by side as there: half of the 180px
+        // column is too narrow for either label.
+        makeSecondaryButton(card, LUCIDE_ARROW_UP_DOWN " Swap up / down", penSwapCb);
+        penResetBtn = makeSecondaryButton(card, PEN_RESET_TEXT, penResetCb, &penResetLbl);
     }
 
     lv_obj_t *makeMachineCard()
     {
         lv_obj_t *card = makeCardShell("MACHINE");
 
-        fncHostLbl = lv_label_create(card);
-        lv_obj_set_style_text_font(fncHostLbl, &lv_font_montserrat_12, 0);
-        lv_obj_add_flag(fncHostLbl, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(fncHostLbl, fncHostCb, LV_EVENT_CLICKED, NULL);
+        // "Host / IP", as terraForge labels its connection field. The card's
+        // own MACHINE title heads this first section; the pen follows the
+        // plotter it belongs to, and terraPixel is a separate device, so it
+        // gets its own section.
+        lv_obj_t *fncField = uiMakeTextField(card, "Host / IP", &fncHostLbl);
+        lv_obj_add_event_cb(fncField, fncHostCb, LV_EVENT_CLICKED, NULL);
 
-        tpHostLbl = lv_label_create(card);
-        lv_obj_set_style_text_font(tpHostLbl, &lv_font_montserrat_12, 0);
-        lv_obj_add_flag(tpHostLbl, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(tpHostLbl, tpHostCb, LV_EVENT_CLICKED, NULL);
+        addPenControls(card);
+
+        makeSectionHeader(card, "TERRAPIXEL");
+        lv_obj_t *tpField = uiMakeTextField(card, "Host / IP", &tpHostLbl);
+        lv_obj_add_event_cb(tpField, tpHostCb, LV_EVENT_CLICKED, NULL);
         refreshHostLabels();
-
-        lv_obj_t *penMmRow = uiMakeRow(card);
-        penMmLbl = lv_label_create(penMmRow);
-        lv_obj_set_style_text_font(penMmLbl, &lv_font_montserrat_12, 0);
-        lv_obj_set_style_text_color(penMmLbl, Palette::textMuted(), 0);
-        // 0.5mm - 20.0mm, stored x10 so the slider can stay integer
-        lv_obj_t *penMmSlider = uiMakeSlider(penMmRow, 5, 200, (int)(Config::get().penJogMm * 10.0f));
-        lv_obj_add_event_cb(penMmSlider, penMmSliderCb, LV_EVENT_VALUE_CHANGED, NULL);
-        lv_obj_add_event_cb(penMmSlider, penMmSliderCb, LV_EVENT_RELEASED, NULL);
-        {
-            char buf[24];
-            snprintf(buf, sizeof(buf), "Pen jog: %.1fmm", Config::get().penJogMm);
-            lv_label_set_text(penMmLbl, buf);
-        }
-
-        lv_obj_t *penFeedRow = uiMakeRow(card);
-        penFeedLbl = lv_label_create(penFeedRow);
-        lv_obj_set_style_text_font(penFeedLbl, &lv_font_montserrat_12, 0);
-        lv_obj_set_style_text_color(penFeedLbl, Palette::textMuted(), 0);
-        lv_obj_t *penFeedSlider = uiMakeSlider(penFeedRow, 100, 3000, (int)Config::get().penJogFeed);
-        lv_obj_add_event_cb(penFeedSlider, penFeedSliderCb, LV_EVENT_VALUE_CHANGED, NULL);
-        lv_obj_add_event_cb(penFeedSlider, penFeedSliderCb, LV_EVENT_RELEASED, NULL);
-        {
-            char buf[28];
-            snprintf(buf, sizeof(buf), "Pen feed: %.0fmm/min", Config::get().penJogFeed);
-            lv_label_set_text(penFeedLbl, buf);
-        }
 
         return card;
     }
@@ -633,8 +704,8 @@ namespace
     {
         lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(e);
         int v = lv_slider_get_value(slider);
-        char buf[28];
-        snprintf(buf, sizeof(buf), "Ring asleep: %d%%", v);
+        char buf[40];
+        snprintf(buf, sizeof(buf), "Ring sleep brightness: %d%%", v);
         lv_label_set_text(sleepLedLbl, buf);
         Config::get().sleepLedBrightnessPct = (uint8_t)v;
         if (lv_event_get_code(e) == LV_EVENT_RELEASED) Config::save();
@@ -705,8 +776,8 @@ namespace
         lv_obj_add_event_cb(sleepLedSlider, sleepLedSliderCb, LV_EVENT_VALUE_CHANGED, NULL);
         lv_obj_add_event_cb(sleepLedSlider, sleepLedSliderCb, LV_EVENT_RELEASED, NULL);
         {
-            char buf[28];
-            snprintf(buf, sizeof(buf), "Ring asleep: %d%%", Config::get().sleepLedBrightnessPct);
+            char buf[40];
+            snprintf(buf, sizeof(buf), "Ring sleep brightness: %d%%", Config::get().sleepLedBrightnessPct);
             lv_label_set_text(sleepLedLbl, buf);
         }
 
@@ -830,10 +901,7 @@ namespace
 
     void addUpdateControls(lv_obj_t *card)
     {
-        lv_obj_t *hdr = lv_label_create(card);
-        lv_label_set_text(hdr, "FIRMWARE");
-        lv_obj_set_style_text_font(hdr, &lv_font_montserrat_12, 0);
-        lv_obj_set_style_text_color(hdr, Palette::accentSecondary(), 0);
+        makeSectionHeader(card, "FIRMWARE");
 
         updateBtn = uiMakeButton(card, "Check for updates", &updateBtnLbl);
         lv_obj_add_event_cb(updateBtn, updateBtnCb, LV_EVENT_CLICKED, NULL);

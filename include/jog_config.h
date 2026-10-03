@@ -27,7 +27,19 @@ static const int JOG_STEP_COUNT = 4;
 // legal Z move without a line of this file appearing to change.
 static const float JOG_MAX_Z_MM = 1.0f;
 
-// Pen up/down: fixed 5mm relative Z jog -- not one of the JOG_STEPS
-// presets above, just a flat button (no step-size selector).
-static const float PEN_JOG_MM = 5.0f;
-static const float PEN_JOG_FEED = 1500.0f; // mm/min
+// Pen up/down: the G-code line the Pen screen sends for each state, editable
+// under Settings > Machine. Same defaults as terraForge's terraPen machine
+// config, so a plot started from terraForge and a pen lifted from the panel
+// agree on where "up" is. Absolute rather than a relative jog: sending one
+// twice is harmless, so the panel's idea of the pen state can't drift away
+// from the machine's.
+//
+// Deliberately no G90/G21 in front, though these run between jobs in
+// whatever modes the last one left (G91 would make "G0Z0" a no-op; G20 would
+// make the lift five inches). Those modes are modal: setting them here would
+// change them for good, overriding whatever the machine or the next client
+// has chosen, and the panel has no business doing that. Jobs set their own
+// modes (terraForge's preamble does), and a user who wants the commands
+// pinned can add G90/G21 to them in Settings.
+#define PEN_UP_CMD "G0Z5"
+#define PEN_DOWN_CMD "G0Z0"

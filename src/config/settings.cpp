@@ -53,8 +53,8 @@ namespace Config
         settings.sleepLedBrightnessPct = prefs.getUChar("sleepLed", 50);
         settings.showIdleLogo = prefs.getBool("idleLogo", true);
         settings.invertMenuRotation = prefs.getBool("invMenuRot", false);
-        settings.penJogMm = prefs.getFloat("penMm", PEN_JOG_MM);
-        settings.penJogFeed = prefs.getFloat("penFeed", PEN_JOG_FEED);
+        copyToBuf(settings.penUpCmd, sizeof(settings.penUpCmd), prefs.getString("penUpCmd", PEN_UP_CMD));
+        copyToBuf(settings.penDownCmd, sizeof(settings.penDownCmd), prefs.getString("penDownCmd", PEN_DOWN_CMD));
         copyToBuf(settings.wifiSsid, sizeof(settings.wifiSsid), prefs.getString("wifiSsid", WIFI_SSID));
         copyToBuf(settings.wifiPass, sizeof(settings.wifiPass), prefs.getString("wifiPass", WIFI_PASS));
     }
@@ -70,8 +70,8 @@ namespace Config
         prefs.putUChar("sleepLed", settings.sleepLedBrightnessPct);
         prefs.putBool("idleLogo", settings.showIdleLogo);
         prefs.putBool("invMenuRot", settings.invertMenuRotation);
-        prefs.putFloat("penMm", settings.penJogMm);
-        prefs.putFloat("penFeed", settings.penJogFeed);
+        prefs.putString("penUpCmd", settings.penUpCmd);
+        prefs.putString("penDownCmd", settings.penDownCmd);
         prefs.putString("wifiSsid", settings.wifiSsid);
         prefs.putString("wifiPass", settings.wifiPass);
     }

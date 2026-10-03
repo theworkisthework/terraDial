@@ -29,8 +29,11 @@ struct AppSettings
     // physical direction of the knob, since that maps to real machine
     // movement and inverting it would be a safety hazard.
     bool invertMenuRotation;
-    float penJogMm;
-    float penJogFeed; // mm/min
+    // Sent as-is by the Pen screen (see PEN_UP_CMD in jog_config.h). Swapped
+    // wholesale for a machine whose pen lifts the other way, rather than
+    // flipping a sign somewhere -- the commands stay what the user typed.
+    char penUpCmd[48];
+    char penDownCmd[48];
     char wifiSsid[33];
     char wifiPass[64];
 };
