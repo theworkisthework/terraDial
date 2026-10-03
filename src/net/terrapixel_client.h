@@ -22,7 +22,8 @@ struct TerraPixelStatus
 //
 // THREADING: every HTTP call here blocks for up to REQUEST_TIMEOUT_MS, plus
 // an mDNS lookup if the host isn't resolved yet. update() therefore runs on
-// main.cpp's networkTask (core 0) and NEVER on the UI loop.
+// main.cpp's lightsTask (core 0) -- NEVER on the UI loop, and not on
+// networkTask either, where it used to stall the FluidNC connection.
 //
 // That split matters. These calls used to be made straight from the Lights
 // screen's widget callbacks and from a 3-second poll that ran on every
@@ -31,15 +32,15 @@ struct TerraPixelStatus
 // like it was "catching up" (see main.cpp's networkTask comment).
 //
 // The UI therefore never calls HTTP. The setters below only record intent
-// and return immediately; the network task applies it and refreshes
-// status(), which the UI reads as a plain struct.
+// and return immediately; lightsTask applies it and refreshes status(),
+// which the UI reads as a plain struct.
 class TerraPixelClient
 {
 public:
     // Call once mDNS is already up (see WifiManager).
     void begin();
 
-    // networkTask only. Applies whatever the UI asked for, and refreshes
+    // lightsTask only. Applies whatever the UI asked for, and refreshes
     // status on its own schedule -- or, in demo mode (demo_mode.h), plays
     // pretend lights that take the settings without any network.
     void update();
@@ -72,7 +73,7 @@ private:
     static const uint32_t REQUEST_TIMEOUT_MS = 1000;
     static const uint32_t REFRESH_MS = 3000;
 
-    // Desired state, written by the UI task and consumed by networkTask.
+    // Desired state, written by the UI task and consumed by lightsTask.
     // Plain volatile flags rather than a queue: these are last-writer-wins
     // values, not a sequence of events that must all be delivered.
     volatile bool setDirty_ = false;
