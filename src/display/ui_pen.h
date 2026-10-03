@@ -8,5 +8,11 @@ lv_obj_t *uiPenCreate();
 // new state is empty (Settings > Machine).
 bool uiPenToggle();
 
+// Sends the pen-up command whatever the tracked state says -- for the park
+// sequence, which can't trust that state (it's only the panel's assumption,
+// and can be wrong after a power cycle or another client moving the pen).
+// Same return as uiPenToggle().
+bool uiPenLift();
+
 // Current pen state, for Job Progress's "pen down" status pill.
 bool uiPenIsDown();

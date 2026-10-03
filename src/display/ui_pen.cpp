@@ -54,8 +54,11 @@ namespace
         const AppSettings &cfg = Config::get();
         const char *cmd = up ? cfg.penUpCmd : cfg.penDownCmd;
         if (!cmd[0]) return false; // cleared in Settings -- nothing to send
+        // State follows the send, not the tap: a command dropped on a full
+        // queue must leave the segments (and the park sequence) knowing the
+        // pen never moved.
+        if (!fluidNC.sendGcodeLine(cmd)) return false;
         penIsUp = up;
-        fluidNC.sendGcodeLine(cmd);
         restyleSegments();
         return true;
     }
@@ -111,4 +114,5 @@ lv_obj_t *uiPenCreate()
 }
 
 bool uiPenToggle() { return setPenUp(!penIsUp); }
+bool uiPenLift() { return setPenUp(true); }
 bool uiPenIsDown() { return !penIsUp; }

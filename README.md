@@ -59,7 +59,7 @@ The Settings sub‑menu, then each of its pages.
 | | | |
 |:--:|:--:|:--:|
 | <img src="docs/screens/settings-ring.svg?v=2" width="180"><br>**Settings sub‑menu** — Wi‑Fi, Machine, Display, About | <img src="docs/screens/settings-wifi.svg?v=2" width="180"><br>**Wi‑Fi** — network, password, connect | <img src="docs/screens/settings-wifi-scan.svg?v=2" width="180"><br>**Wi‑Fi: network picker** — tap the SSID to scan |
-| <img src="docs/screens/settings-machine-host.svg?v=2" width="180"><br>**Machine: hosts** — FluidNC host / IP | <img src="docs/screens/settings-machine-pen.svg?v=2" width="180"><br>**Machine: pen up / down commands** — swap, reset to defaults | <img src="docs/screens/settings-machine-terrapixel.svg?v=2" width="180"><br>**Machine: terraPixel** — lights host / IP |
+| <img src="docs/screens/settings-machine-host.svg?v=3" width="180"><br>**Machine: hosts** — FluidNC host / IP | <img src="docs/screens/settings-machine-pen.svg?v=3" width="180"><br>**Machine: pen up / down commands** — swap, reset to defaults | <img src="docs/screens/settings-machine-terrapixel.svg?v=2" width="180"><br>**Machine: terraPixel** — lights host / IP |
 | <img src="docs/screens/settings-display.svg?v=3" width="180"><br>**Display: screen** — brightness, idle logo, menu rotation | <img src="docs/screens/settings-display-sleep.svg?v=2" width="180"><br>**Display: sleep** — sleep timeout, ring sleep brightness | <img src="docs/screens/about.svg?v=2" width="180"><br>**About** — identity, QR links, diagnostics |
 
 ### Pop-up screens

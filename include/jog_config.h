@@ -28,10 +28,17 @@ static const int JOG_STEP_COUNT = 4;
 static const float JOG_MAX_Z_MM = 1.0f;
 
 // Pen up/down: the G-code line the Pen screen sends for each state, editable
-// under Settings > Machine. Same defaults as terraForge's terraPen machine
+// under Settings > Machine. The same Z0/Z5 as terraForge's terraPen machine
 // config, so a plot started from terraForge and a pen lifted from the panel
 // agree on where "up" is. Absolute rather than a relative jog: sending one
 // twice is harmless, so the panel's idea of the pen state can't drift away
 // from the machine's.
-#define PEN_UP_CMD "G0Z5"
-#define PEN_DOWN_CMD "G0Z0"
+//
+// Unlike terraForge's bare "G0Z5", each sets G90 (absolute) and G21 (mm)
+// first. terraForge sends its pen moves inside a job it wrote, so it knows
+// the modes in force; the panel sends them between jobs, into whatever modes
+// the last one left. A job ending in G91 would make "G0Z0" a no-op and
+// "G0Z5" a 5mm climb from wherever the pen was; one ending in G20 would make
+// the lift five inches.
+#define PEN_UP_CMD "G90 G21 G0 Z5"
+#define PEN_DOWN_CMD "G90 G21 G0 Z0"

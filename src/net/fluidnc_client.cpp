@@ -32,15 +32,15 @@ void FluidNCClient::begin()
     // before this is used -- nothing to do here.
 }
 
-void FluidNCClient::enqueue(bool raw, const char *text)
+bool FluidNCClient::enqueue(bool raw, const char *text)
 {
-    if (!cmdQueue_) return; // initTransport() not called yet -- nothing to do but drop
+    if (!cmdQueue_) return false; // initTransport() not called yet -- nothing to do but drop
     if (strlen(text) > MAX_COMMAND_LEN)
     {
         // Never send a truncated command -- see MAX_COMMAND_LEN.
         Serial.printf("[fluidnc] command too long for FluidNC (%u chars), not sent: %.60s...\n",
                       (unsigned)strlen(text), text);
-        return;
+        return false;
     }
     OutCmd cmd;
     cmd.raw = raw;
@@ -49,7 +49,11 @@ void FluidNCClient::enqueue(bool raw, const char *text)
     // is wedged behind a slow socket, dropping a jog/status command is far
     // better than freezing the display until it recovers.
     if (xQueueSend(cmdQueue_, &cmd, 0) != pdTRUE)
+    {
         Serial.printf("[fluidnc] command queue full, dropped: %s\n", text);
+        return false;
+    }
+    return true;
 }
 
 void FluidNCClient::drainCommandQueue()
@@ -779,4 +783,4 @@ bool FluidNCClient::deleteFile(const char *path)
     return true;
 }
 
-void FluidNCClient::sendGcodeLine(const char *line) { enqueue(false, line); }
+bool FluidNCClient::sendGcodeLine(const char *line) { return enqueue(false, line); }

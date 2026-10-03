@@ -4,6 +4,7 @@
 #include "machine_extents.h"
 #include "palette.h"
 #include "ui_pen.h"
+#include "../config/settings.h"
 #include "ui_screen_shell.h"
 #include <stdio.h>
 
@@ -178,21 +179,25 @@ void uiParkTrigger()
 
     // Lift before homing, not after: homing drags the carriage the length of
     // both axes, and a pen left down draws a line across the finished plot on
-    // the way. uiPenToggle() rather than sending the pen-up command directly
-    // so the Pen screen's segmented control still shows the truth afterwards.
+    // the way. Sent whether or not the panel believes the pen is down: that
+    // belief is only an assumption (see ui_pen.cpp), the pen-up command is
+    // absolute so re-sending it is harmless, and a pen that is down when we
+    // think it's up is exactly the case that wrecks the plot. uiPenLift()
+    // rather than sending the command directly so the Pen screen's segmented
+    // control shows the truth afterwards.
     //
     // Skipped when alarmed, because an alarmed machine rejects motion outright
     // -- the lift would be swallowed and we would sit waiting for motion that
     // was never going to happen. home() unlocks before it homes anyway, and a
     // pen that is already clear of the bed is the common case after a plot.
     //
-    // If the lift can't be sent -- an empty pen-up command, or the machine
-    // isn't idle -- stop here: homing with the pen down is the exact damage
-    // this step exists to prevent.
+    // If the lift can't be sent -- no pen-up command, the machine isn't
+    // idle, or the command was dropped -- stop here: homing with the pen down
+    // is the exact damage this step exists to prevent.
     bool alarmed = (st.mode == MachineMode::Alarm);
-    if (!alarmed && uiPenIsDown() && !uiPenToggle())
+    if (!alarmed && !uiPenLift())
     {
-        fail("Can't lift pen");
+        fail(Config::get().penUpCmd[0] ? "Can't lift pen" : "No pen-up command");
         return;
     }
 
@@ -219,8 +224,8 @@ void uiParkUpdate()
     {
         case Phase::LiftSettle:
             // Both conditions, not either: the settle time alone can expire
-            // while the Z jog is still running, and Idle alone is true for
-            // the moment before the jog we just queued has even reached the
+            // while the pen lift is still running, and Idle alone is true for
+            // the moment before the lift we just queued has even reached the
             // machine (commands cross to networkTask through a queue).
             if (elapsed >= LIFT_SETTLE_MS &&
                 (mode == MachineMode::Idle || mode == MachineMode::Alarm))

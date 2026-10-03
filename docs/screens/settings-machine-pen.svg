@@ -6,10 +6,10 @@
 <text x="120" y="50" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#60a0ff" text-anchor="middle" dominant-baseline="central">PEN</text>
 <text x="32" y="70" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9ca3af" text-anchor="start" dominant-baseline="central">Pen up command</text>
 <rect x="32" y="79" width="176" height="26" rx="8" fill="#16213e" stroke="#5c7a9e" stroke-width="1"/>
-<text x="43" y="92" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#e0e0e0" text-anchor="start" dominant-baseline="central">G0Z5</text>
+<text x="43" y="92" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#e0e0e0" text-anchor="start" dominant-baseline="central">G90 G21 G0 Z5</text>
 <text x="32" y="118" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9ca3af" text-anchor="start" dominant-baseline="central">Pen down command</text>
 <rect x="32" y="127" width="176" height="26" rx="8" fill="#16213e" stroke="#5c7a9e" stroke-width="1"/>
-<text x="43" y="140" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#e0e0e0" text-anchor="start" dominant-baseline="central">G0Z0</text>
+<text x="43" y="140" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#e0e0e0" text-anchor="start" dominant-baseline="central">G90 G21 G0 Z0</text>
 <rect x="30" y="162" width="180" height="30" rx="15" fill="#0f3460"/>
 <g transform="translate(67.4 171) scale(0.5)" fill="none" stroke="#e0e0e0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></g>
 <text x="84.4" y="177" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#e0e0e0" text-anchor="start" dominant-baseline="central">Swap up / down</text>

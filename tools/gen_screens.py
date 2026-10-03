@@ -466,7 +466,7 @@ def screen_settings_machine_host():
     text(p, 120, 50, "MACHINE", 12, ACCENT_SECONDARY, "600")
     text_field(p, 70, "Host / IP", "terrapen")
     text(p, 120, 132, "PEN", 12, ACCENT_SECONDARY, "600")
-    text_field(p, 150, "Pen up command", "G0Z5")
+    text_field(p, 150, "Pen up command", "G90 G21 G0 Z5")
     back_button(p)
     tail(p)
     return "settings-machine-host", p
@@ -476,8 +476,8 @@ def screen_settings_machine_pen():
     p = []
     head(p)
     text(p, 120, 50, "PEN", 12, ACCENT_SECONDARY, "600")
-    text_field(p, 70, "Pen up command", "G0Z5")
-    text_field(p, 118, "Pen down command", "G0Z0")
+    text_field(p, 70, "Pen up command", "G90 G21 G0 Z5")
+    text_field(p, 118, "Pen down command", "G90 G21 G0 Z0")
     secondary_button(p, 162, "arrow-up-down", "Swap up / down")
     back_button(p)
     tail(p)

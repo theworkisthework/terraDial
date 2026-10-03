@@ -112,7 +112,7 @@ public:
     // than FluidNC accepts -- see runPathFits().
     bool runFile(const char *path);                     // $SD/Run=<path>
     bool deleteFile(const char *path);                  // $SD/Delete=<path>
-    void sendGcodeLine(const char *line);                // arbitrary line (pen macros, etc.)
+    bool sendGcodeLine(const char *line);                // arbitrary line (pen macros, etc.); false if dropped
 
     // FluidNC reads a command into a 255-byte buffer (Channel::maxLine,
     // v4.0.3), so the longest line it accepts is 254 characters. A longer
@@ -212,7 +212,10 @@ private:
     void noteMessage(const char *line);
     static const uint32_t FAILURE_STICKY_MS = 20000;
 
-    void enqueue(bool raw, const char *text);
+    // False if the command was dropped (too long, queue full, or no
+    // transport yet) -- most callers can ignore it, but anything that acts
+    // on a command having been sent (the park sequence's pen lift) can't.
+    bool enqueue(bool raw, const char *text);
     void drainCommandQueue();
     void servicePendingHome();
 
