@@ -193,7 +193,7 @@ void TerraPixelClient::setRadius(float radiusLeds)
 void TerraPixelClient::toggleParty() { partyPending_ = true; }
 void TerraPixelClient::requestRefresh() { refreshPending_ = true; }
 
-// ---- networkTask side: everything that can block ----
+// ---- lightsTask side: everything that can block ----
 
 // Demo mode: the settings the Lights screen asks for are simply taken as
 // the lights' state, which is all the screen can see of the real ones.
