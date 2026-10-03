@@ -45,6 +45,7 @@ bool FluidNCClient::enqueue(bool raw, const char *text, uint32_t ticket)
     OutCmd cmd;
     cmd.raw = raw;
     cmd.ticket = ticket;
+    cmd.epoch = channelEpoch_;
     strcpy(cmd.text, text);
     // Never block the UI task waiting for queue space: if the network task
     // is wedged behind a slow socket, dropping a jog/status command is far
@@ -57,12 +58,25 @@ bool FluidNCClient::enqueue(bool raw, const char *text, uint32_t ticket)
     return true;
 }
 
+// A queued line command from before the last newChannel(). Realtime bytes
+// are never stale: '!' and 0x18 are stops, and must reach whatever is
+// listening now even if they were sent a moment before a reconnect; the
+// rest ('?', '~', 0x85) are harmless on any channel.
+bool FluidNCClient::staleLine(const OutCmd &cmd)
+{
+    if (cmd.raw || cmd.epoch == channelEpoch_) return false;
+    Serial.printf("[fluidnc] dropped, queued for a previous connection: %s\n", cmd.text);
+    if (cmd.ticket) trackSent(cmd.ticket, false); // reads Lost
+    return true;
+}
+
 void FluidNCClient::drainCommandQueue()
 {
     if (!cmdQueue_) return;
     OutCmd cmd;
     while (xQueueReceive(cmdQueue_, &cmd, 0) == pdTRUE)
     {
+        if (staleLine(cmd)) continue;
         if (cmd.raw) sendRaw(cmd.text);
         else
         {
@@ -101,10 +115,15 @@ void FluidNCClient::noteAck(bool ok)
     }
 }
 
-// A new channel (or the sim) starts its replies from scratch, and nothing
-// still outstanding on the old one will ever be answered.
-void FluidNCClient::resetAcks()
+// What's on the other end of the queue just changed: a new or dropped
+// websocket, or demo mode switching over. Replies start from scratch on the
+// new channel, nothing outstanding on the old one will be answered, and any
+// line still queued was meant for the old one -- staleLine() drops it rather
+// than run it against something else (a demo tour's pen lift reaching the
+// real machine, say).
+void FluidNCClient::newChannel()
 {
+    channelEpoch_++;
     linesSent_ = 0;
     acksReceived_ = 0;
     if (trackedPending_) publishAck(trackedTicket_, AckState::Lost);
@@ -307,7 +326,7 @@ void FluidNCClient::enterDemo()
     status_.connected = true;
     lineLen_ = 0;
     homePending_ = false;
-    resetAcks();
+    newChannel();
     sim_.reset();
     demoActive_ = true;
     fileListRequested_ = true; // whatever folder Jobs is in, from the demo card
@@ -319,7 +338,7 @@ void FluidNCClient::leaveDemo()
     status_ = FluidNCStatus(); // disconnected, until the real machine answers
     lineLen_ = 0;
     homePending_ = false;
-    resetAcks();
+    newChannel();
     demoActive_ = false;
     lastResolveAttempt_ = 0; // reconnect straight away
     // Replace the demo card's listing with an empty one, so no demo entry
@@ -345,6 +364,7 @@ void FluidNCClient::demoUpdate()
     OutCmd cmd;
     while (cmdQueue_ && xQueueReceive(cmdQueue_, &cmd, 0) == pdTRUE)
     {
+        if (staleLine(cmd)) continue;
         // Counted before the sim runs it: the sim replies synchronously,
         // from inside command().
         if (!cmd.raw)
@@ -509,7 +529,7 @@ void FluidNCClient::onWsEvent(uint8_t type, uint8_t *payload, size_t length)
             Serial.println("[fluidnc] websocket connected");
             status_.connected = true;
             lineLen_ = 0; // never glue a fresh connection onto a half-received line
-            resetAcks();
+            newChannel();
             // Re-issued on every (re)connect -- auto-reporting is per-channel
             // and FluidNC forgets it across disconnects.
             sendLine("$Report/Interval=100");
@@ -526,7 +546,7 @@ void FluidNCClient::onWsEvent(uint8_t type, uint8_t *payload, size_t length)
             status_.mode = MachineMode::Boot;
             status_.havePos = false;
             lineLen_ = 0;
-            resetAcks();
+            newChannel();
             break;
 
         // A whole message ends a line even without a trailing newline:

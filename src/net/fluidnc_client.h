@@ -221,6 +221,7 @@ private:
     {
         bool raw;
         uint32_t ticket; // non-zero: a tracked line, see sendGcodeLineTracked()
+        uint32_t epoch;  // channelEpoch_ when queued -- see newChannel()
         char text[MAX_COMMAND_LEN + 1];
     };
     static const int CMD_QUEUE_DEPTH = 12;
@@ -251,7 +252,12 @@ private:
     void publishAck(uint32_t ticket, AckState st) { trackedAck_ = (ticket << 2) | (uint32_t)st; }
     void trackSent(uint32_t ticket, bool sent);
     void noteAck(bool ok);
-    void resetAcks();
+    // Bumped by newChannel() whenever what's on the other end of the queue
+    // changes: a websocket connect or drop, or demo mode switching on or
+    // off. Written by networkTask, read by enqueue() on either task.
+    volatile uint32_t channelEpoch_ = 0;
+    void newChannel();
+    bool staleLine(const OutCmd &cmd);
     void drainCommandQueue();
     void servicePendingHome();
 
