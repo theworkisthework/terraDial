@@ -21,13 +21,50 @@ namespace
     lv_obj_t *upLbl = nullptr;
     lv_obj_t *downLbl = nullptr;
 
+    // The last command sent, until FluidNC answers it. penIsUp only follows
+    // on "ok": a command it rejects (the commands are user-editable, so a
+    // typo is one tap away) or that is lost never moved the pen, and the
+    // segments -- and Job Progress's pen pill, via uiPenIsDown() -- must not
+    // say it did.
+    uint32_t pendingTicket = 0;
+    bool pendingUp = false;
+    uint32_t pendingSince = 0;
+    lv_timer_t *ackTimer = nullptr;
+    // Matches the park sequence's lift timeout: past this, a reply that
+    // hasn't come is not coming.
+    const uint32_t ACK_TIMEOUT_MS = 8000;
+
     void restyleSegments()
     {
+        if (!upSeg) return; // screen not built yet
         lv_obj_set_style_bg_color(upSeg, penIsUp ? Palette::accent() : Palette::bgSecondary(), 0);
         lv_obj_set_style_text_color(upLbl, penIsUp ? Palette::accentFg() : Palette::textMuted(), 0);
         lv_obj_set_style_bg_color(downSeg, !penIsUp ? Palette::accent() : Palette::bgSecondary(), 0);
         lv_obj_set_style_text_color(downLbl, !penIsUp ? Palette::accentFg() : Palette::textMuted(), 0);
     }
+
+    void pollAck()
+    {
+        if (!pendingTicket) return;
+        switch (fluidNC.ackState(pendingTicket))
+        {
+            case FluidNCClient::AckState::Ok:
+                penIsUp = pendingUp;
+                restyleSegments();
+                pendingTicket = 0;
+                break;
+            case FluidNCClient::AckState::Error:
+            case FluidNCClient::AckState::Lost:
+                pendingTicket = 0; // the pen didn't move; keep showing where it is
+                break;
+            case FluidNCClient::AckState::Pending:
+                if (millis() - pendingSince >= ACK_TIMEOUT_MS) pendingTicket = 0;
+                break;
+        }
+        if (!pendingTicket && ackTimer) lv_timer_pause(ackTimer);
+    }
+
+    void ackTimerCb(lv_timer_t *) { pollAck(); }
 
     // Returns the sent command's ticket (FluidNCClient::sendGcodeLineTracked),
     // or 0 if nothing was sent -- the park sequence must not go on to home
@@ -41,9 +78,8 @@ namespace
         // terraForge, which jobActive can't see (that only covers SD files),
         // or another client's moves. Run also covers our own previous pen
         // move, so a second tap before it finishes is dropped; penIsUp only
-        // changes on a send, so the segments still show the truth and the
-        // tap can just be repeated. Alarm and Homing would swallow it, and
-        // the segments would then lie.
+        // changes on FluidNC's ok, so the segments still show the truth and
+        // the tap can just be repeated. Alarm and Homing would refuse it.
         const FluidNCStatus &st = fluidNC.status();
         if (!st.connected || st.jobActive) return 0;
         if (st.mode != MachineMode::Idle && st.mode != MachineMode::Done) return 0;
@@ -55,13 +91,18 @@ namespace
         const AppSettings &cfg = Config::get();
         const char *cmd = up ? cfg.penUpCmd : cfg.penDownCmd;
         if (!cmd[0]) return 0; // cleared in Settings -- nothing to send
-        // State follows the send, not the tap: a command dropped on a full
-        // queue must leave the segments (and the park sequence) knowing the
-        // pen never moved.
+        // Settle the previous command first: sending a new tracked line
+        // supersedes the old one's ticket, so an ok already in for it would
+        // otherwise read as Lost and never be applied.
+        pollAck();
         uint32_t ticket = fluidNC.sendGcodeLineTracked(cmd);
         if (!ticket) return 0;
-        penIsUp = up;
-        restyleSegments();
+        // State follows FluidNC's "ok", not the tap -- see pendingTicket.
+        pendingTicket = ticket;
+        pendingUp = up;
+        pendingSince = millis();
+        if (!ackTimer) ackTimer = lv_timer_create(ackTimerCb, 50, nullptr);
+        lv_timer_resume(ackTimer);
         return ticket;
     }
 
@@ -115,6 +156,9 @@ lv_obj_t *uiPenCreate()
     return shell.screen;
 }
 
-bool uiPenToggle() { return setPenUp(!penIsUp) != 0; }
+// Toggles from the state last asked for, not the last confirmed one: a
+// second knob click before the first command's ok has come back means
+// "the other way again", not "the same way twice".
+bool uiPenToggle() { return setPenUp(pendingTicket ? !pendingUp : !penIsUp) != 0; }
 uint32_t uiPenLift() { return setPenUp(true); }
 bool uiPenIsDown() { return !penIsUp; }

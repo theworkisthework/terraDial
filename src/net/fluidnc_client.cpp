@@ -570,8 +570,16 @@ bool FluidNCClient::sendLine(const String &line)
         Serial.printf("[fluidnc] sendLine(\"%s\") dropped -- not connected\n", line.c_str());
         return false;
     }
-    linesSent_++; // every line gets exactly one ok/error back -- see noteAck()
-    wsClient.sendTXT(line + "\n");
+    String out = line + "\n";
+    if (!wsClient.sendTXT(out))
+    {
+        Serial.printf("[fluidnc] sendLine(\"%s\") dropped -- websocket write failed\n", line.c_str());
+        return false;
+    }
+    // Counted only once the transport took it: every line that reaches
+    // FluidNC gets exactly one ok/error back (see noteAck()), and one that
+    // didn't must not leave the count waiting on a reply that won't come.
+    linesSent_++;
     return true;
 }
 
