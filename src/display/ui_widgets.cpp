@@ -59,24 +59,91 @@ lv_obj_t *uiMakePanel(lv_obj_t *parent, const char *title)
     return panel;
 }
 
+namespace
+{
+    const lv_coord_t SLIDER_TRACK_H = 10; // chunkier than stock -- easier to grab on a small round panel
+    const lv_coord_t SLIDER_KNOB_PAD = 4;
+    const lv_coord_t SLIDER_KNOB_R = SLIDER_TRACK_H / 2 + SLIDER_KNOB_PAD;
+    const lv_coord_t SLIDER_TRACK_RADIUS = SLIDER_TRACK_H / 2;
+
+    // Fills the left end of the track that the MAIN padding (see
+    // uiMakeSlider) leaves out of the indicator. Runs once the track has
+    // been drawn and before the indicator and knob are, so both land on top
+    // of it. The cap runs a whole knob width: at min the knob hides all of
+    // it, and past that its straight middle covers the join with the
+    // indicator's rounded start, so the two read as one bar.
+    void sliderCapCb(lv_event_t *e)
+    {
+        lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+        // MAIN also reports a post-draw border pass; only the track counts.
+        if (dsc->part != LV_PART_MAIN || dsc->class_p != &lv_obj_class ||
+            dsc->type != LV_OBJ_DRAW_PART_RECTANGLE)
+            return;
+
+        lv_obj_t *slider = lv_event_get_target(e);
+        lv_area_t cap;
+        lv_obj_get_coords(slider, &cap);
+        cap.x2 = cap.x1 + 2 * SLIDER_KNOB_R - 1;
+
+        lv_draw_rect_dsc_t rect;
+        lv_draw_rect_dsc_init(&rect);
+        rect.bg_color = lv_obj_get_style_bg_color(slider, LV_PART_INDICATOR);
+        rect.bg_opa = LV_OPA_COVER;
+        rect.radius = SLIDER_TRACK_RADIUS;
+        lv_draw_rect(dsc->draw_ctx, &rect, &cap);
+    }
+}
+
 lv_obj_t *uiMakeSlider(lv_obj_t *parent, int32_t min, int32_t max, int32_t value)
 {
-    lv_obj_t *slider = lv_slider_create(parent);
+    // The knob is centred on the end of the indicator. Left to itself that
+    // runs from the track's very first pixel to its very last, so at min and
+    // max half the knob hangs past the track -- clipped flat by the row it
+    // sits in, and once that was fixed by insetting the track, the bar no
+    // longer lined up with the left-aligned rows around it.
+    //
+    // Instead the track's MAIN padding stops the indicator one knob radius
+    // short of each end. LVGL keys the knob's travel and the drag-to-value
+    // mapping off that same padded range, so the knob's edge stops exactly
+    // at the track's ends and the track can fill the full column. The
+    // indicator is also clipped to the padded range, which would leave an
+    // unfilled stub at the left; sliderCapCb paints it.
+    //
+    // The wrapper only gives the knob room vertically, where it still
+    // overhangs the track by SLIDER_KNOB_PAD.
+    lv_obj_t *wrap = lv_obj_create(parent);
+    lv_obj_set_size(wrap, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(wrap, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(wrap, 0, 0);
+    lv_obj_set_style_pad_hor(wrap, 0, 0);
+    lv_obj_set_style_pad_ver(wrap, SLIDER_KNOB_PAD, 0);
+    lv_obj_clear_flag(wrap, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(wrap, LV_SCROLLBAR_MODE_OFF);
+    // Touches only reach the slider through the wrapper's own hit area, so
+    // without this the slider's 8px ext click area below would be cut to the
+    // wrapper's SLIDER_KNOB_PAD. Not clickable itself: a near-miss beside the
+    // track still falls through to the slider or the scrolling panel.
+    lv_obj_clear_flag(wrap, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(wrap, 8 - SLIDER_KNOB_PAD);
+
+    lv_obj_t *slider = lv_slider_create(wrap);
     lv_obj_set_width(slider, lv_pct(100));
-    lv_obj_set_height(slider, 10); // chunkier than stock -- easier to grab on a small round panel
+    lv_obj_set_height(slider, SLIDER_TRACK_H);
     lv_slider_set_range(slider, min, max);
     lv_slider_set_value(slider, value, LV_ANIM_OFF);
 
     // Unfilled track
     lv_obj_set_style_bg_color(slider, Palette::bgPanel(), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(slider, 5, LV_PART_MAIN);
+    lv_obj_set_style_radius(slider, SLIDER_TRACK_RADIUS, LV_PART_MAIN);
+    lv_obj_set_style_pad_hor(slider, SLIDER_KNOB_R, LV_PART_MAIN);
+    lv_obj_add_event_cb(slider, sliderCapCb, LV_EVENT_DRAW_PART_END, NULL);
     // Filled portion
     lv_obj_set_style_bg_color(slider, Palette::accent(), LV_PART_INDICATOR);
-    lv_obj_set_style_radius(slider, 5, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(slider, SLIDER_TRACK_RADIUS, LV_PART_INDICATOR);
     // Handle -- white on the red reads clearly and matches accentFg usage
     lv_obj_set_style_bg_color(slider, Palette::accentFg(), LV_PART_KNOB);
-    lv_obj_set_style_pad_all(slider, 4, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider, SLIDER_KNOB_PAD, LV_PART_KNOB);
     // Extends the touch area past the 10px track without drawing bigger.
     lv_obj_set_ext_click_area(slider, 8);
     return slider;

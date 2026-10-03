@@ -704,8 +704,8 @@ namespace
     {
         lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(e);
         int v = lv_slider_get_value(slider);
-        char buf[28];
-        snprintf(buf, sizeof(buf), "Ring asleep: %d%%", v);
+        char buf[40];
+        snprintf(buf, sizeof(buf), "Ring sleep brightness: %d%%", v);
         lv_label_set_text(sleepLedLbl, buf);
         Config::get().sleepLedBrightnessPct = (uint8_t)v;
         if (lv_event_get_code(e) == LV_EVENT_RELEASED) Config::save();
@@ -776,8 +776,8 @@ namespace
         lv_obj_add_event_cb(sleepLedSlider, sleepLedSliderCb, LV_EVENT_VALUE_CHANGED, NULL);
         lv_obj_add_event_cb(sleepLedSlider, sleepLedSliderCb, LV_EVENT_RELEASED, NULL);
         {
-            char buf[28];
-            snprintf(buf, sizeof(buf), "Ring asleep: %d%%", Config::get().sleepLedBrightnessPct);
+            char buf[40];
+            snprintf(buf, sizeof(buf), "Ring sleep brightness: %d%%", Config::get().sleepLedBrightnessPct);
             lv_label_set_text(sleepLedLbl, buf);
         }
 

@@ -132,6 +132,9 @@ LUCIDE = {
     "check": '<path d="M20 6 9 17l-5-5"/>',
     "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     "chevron-left": '<path d="m15 18-6-6 6-6"/>',
+    "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    "rotate-ccw": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    "arrow-up-down": '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
     "triangle-alert": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
                       '<path d="M12 9v4"/><path d="M12 17h.01"/>',
 }
@@ -343,25 +346,154 @@ def screen_settings_ring():
     return "settings-ring", p
 
 
+def slider(parts, y, pct):
+    """uiMakeSlider (ui_widgets.cpp): 10px bg-panel track, accent fill,
+    18px white knob. The track fills the 176px row; the knob's travel is
+    inset one knob radius from each end, so its edge stops at the track's
+    ends, and the fill runs from the track's left end to the knob."""
+    knob_r = 9
+    rect(parts, 32, y, 176, 10, 5, BG_PANEL)
+    cx = 32 + knob_r + (176 - 2 * knob_r) * pct / 100.0
+    rect(parts, 32, y, cx - 32, 10, 5, ACCENT)
+    circle(parts, cx, y + 5, knob_r, ACCENT_FG)
+
+
+def switch(parts, y, on):
+    """uiMakeSwitch (ui_widgets.cpp): 44x24, accent when on."""
+    rect(parts, 32, y, 44, 24, 12, ACCENT if on else BG_PANEL)
+    circle(parts, 64 if on else 44, y + 12, 9, ACCENT_FG)
+
+
+# makeDisplayCard, drawn as two screenfuls like Machine. Rows are
+# uiMakeRow flex columns, so labels and controls sit at the left edge.
 def screen_settings_display():
     p = []
     head(p)
-    text(p, 120, 52, "DISPLAY", 12, ACCENT_SECONDARY, "600")
-    text(p, 120, 76, "Brightness: 100%", 12, TEXT_MUTED)
-    rect(p, 30, 86, 180, 10, 5, BG_PANEL)
-    rect(p, 30, 86, 180, 10, 5, ACCENT)
-    circle(p, 205, 91, 8, ACCENT_FG)
-    text(p, 120, 112, "Invert menu rotation", 12, TEXT_MUTED)
-    rect(p, 98, 122, 44, 24, 12, BG_PANEL)
-    circle(p, 110, 134, 9, ACCENT_FG)
-    text(p, 120, 162, "Sleep after", 12, TEXT_MUTED)
-    for i, (lbl, sel) in enumerate((("Never", 0), ("3m", 0), ("5m", 1), ("10m", 0))):
-        x = 36 + i * 42
-        rect(p, x, 172, 38, 26, 13, ACCENT if sel else BG_PANEL)
-        text(p, x + 19, 185, lbl, 11, ACCENT_FG if sel else TEXT_MUTED, "600")
+    text(p, 120, 50, "DISPLAY", 12, ACCENT_SECONDARY, "600")
+    text(p, 32, 72, "Brightness: 100%", 12, TEXT_MUTED, anchor="start")
+    slider(p, 82, 100)
+    text(p, 32, 108, "Idle logo", 12, TEXT_MUTED, anchor="start")
+    switch(p, 118, True)
+    text(p, 32, 158, "Invert menu rotation", 12, TEXT_MUTED, anchor="start")
+    switch(p, 168, False)
     back_button(p)
     tail(p)
     return "settings-display", p
+
+
+def screen_settings_display_sleep():
+    p = []
+    head(p)
+    text(p, 32, 58, "Invert menu rotation", 12, TEXT_MUTED, anchor="start")
+    switch(p, 68, False)
+    text(p, 32, 110, "Sleep after", 12, TEXT_MUTED, anchor="start")
+    for i, (lbl, sel) in enumerate((("Never", 0), ("3m", 0), ("5m", 1), ("10m", 0))):
+        x = 32 + i * 42
+        rect(p, x, 120, 38, 26, 13, ACCENT if sel else BG_PANEL)
+        text(p, x + 19, 133, lbl, 11, ACCENT_FG if sel else TEXT_MUTED, "600")
+    text(p, 32, 162, "Ring sleep brightness: 50%", 12, TEXT_MUTED, anchor="start")
+    slider(p, 172, 50)
+    back_button(p)
+    tail(p)
+    return "settings-display-sleep", p
+
+
+def text_field(parts, y, label, value):
+    """uiMakeTextField (ui_widgets.cpp): muted caption over a bg-panel box,
+    1px border, 8px corners -- terraForge's form input. Left-aligned, as the
+    row's flex column lays it out."""
+    text(parts, 32, y, label, 12, TEXT_MUTED, anchor="start")
+    rect(parts, 32, y + 9, 176, 26, 8, BG_PANEL, stroke=BORDER)
+    text(parts, 43, y + 22, value, 12, TEXT, anchor="start")
+
+
+def secondary_button(parts, y, icon_name, label):
+    """makeSecondaryButton (ui_settings.cpp): full-width bg-secondary pill,
+    lucide_12 icon leading the text. Centred on an estimated text width --
+    Montserrat 12 averages ~6.3px a character."""
+    rect(parts, 30, y, 180, 30, 15, BG_SECONDARY)
+    w = 12 + 5 + len(label) * 6.3
+    x = 120 - w / 2
+    icon(parts, x + 6, y + 15, icon_name, 12, TEXT)
+    text(parts, x + 17, y + 15, label, 12, TEXT, anchor="start")
+
+
+def screen_settings_wifi():
+    # makeWifiCard: SSID (tap -> network picker), password, status, Connect,
+    # Forget network. Centred, as the panel's flex column lays them out.
+    p = []
+    head(p)
+    text(p, 120, 50, "WI-FI", 12, ACCENT_SECONDARY, "600")
+    text(p, 114, 72, "SSID: Studio", 12, TEXT)
+    icon(p, 157, 72, "chevron-right", 12, TEXT)
+    text(p, 120, 92, "Password: (tap to edit)", 12, TEXT)
+    text(p, 120, 112, "Connected", 12, TEXT_MUTED)
+    rect(p, 65, 124, 110, 34, 17, ACCENT)
+    text(p, 120, 141, "Connect", 16, ACCENT_FG)
+    rect(p, 45, 164, 150, 28, 14, BG_SECONDARY)
+    text(p, 120, 178, "Forget network", 12, TEXT)
+    back_button(p)
+    tail(p)
+    return "settings-wifi", p
+
+
+def screen_settings_wifi_scan():
+    # openScanOverlay: full-face overlay on the top layer, so the screen's
+    # back button is covered -- the X (or a knob long-press) closes it. The
+    # knob highlight starts on the first network.
+    p = []
+    head(p)
+    circle(p, 120, 28, 14, BG_SECONDARY)
+    icon(p, 120, 28, "x", 12, TEXT)
+    text(p, 120, 54, "Select a network", 14, TEXT, "600")
+    for i, (name, sel) in enumerate((("Studio", 1), ("Workshop-5G", 0), ("terrapen-guest", 0))):
+        y = 74 + i * 34
+        rect(p, 25, y, 190, 34, 0, ACCENT if sel else BG_PANEL)
+        col = ACCENT_FG if sel else TEXT
+        icon(p, 45, y + 17, "wifi", 16, col)
+        text(p, 61, y + 17, name, 14, col, anchor="start")
+    rect(p, 70, 194, 100, 30, 15, BG_SECONDARY)
+    text(p, 120, 209, "Rescan", 12, TEXT)
+    tail(p)
+    return "settings-wifi-scan", p
+
+
+# The Machine card is taller than the face, so it's drawn three times: at
+# the top, scrolled to the pen section, and scrolled to the end.
+def screen_settings_machine_host():
+    p = []
+    head(p)
+    text(p, 120, 50, "MACHINE", 12, ACCENT_SECONDARY, "600")
+    text_field(p, 70, "Host / IP", "terrapen")
+    text(p, 120, 132, "PEN", 12, ACCENT_SECONDARY, "600")
+    text_field(p, 150, "Pen up command", "G0Z5")
+    back_button(p)
+    tail(p)
+    return "settings-machine-host", p
+
+
+def screen_settings_machine_pen():
+    p = []
+    head(p)
+    text(p, 120, 50, "PEN", 12, ACCENT_SECONDARY, "600")
+    text_field(p, 70, "Pen up command", "G0Z5")
+    text_field(p, 118, "Pen down command", "G0Z0")
+    secondary_button(p, 162, "arrow-up-down", "Swap up / down")
+    back_button(p)
+    tail(p)
+    return "settings-machine-pen", p
+
+
+def screen_settings_machine_terrapixel():
+    p = []
+    head(p)
+    secondary_button(p, 46, "arrow-up-down", "Swap up / down")
+    secondary_button(p, 84, "rotate-ccw", "Reset to defaults")
+    text(p, 120, 132, "TERRAPIXEL", 12, ACCENT_SECONDARY, "600")
+    text_field(p, 152, "Host / IP", "terrapen-leds")
+    back_button(p)
+    tail(p)
+    return "settings-machine-terrapixel", p
 
 
 def screen_job_progress():
@@ -552,7 +684,10 @@ def main():
     out = os.path.join(root, "docs", "screens")
     os.makedirs(out, exist_ok=True)
     for fn in (screen_home, screen_jobs, screen_jog, screen_pen, screen_home_confirm,
-               screen_lights, screen_settings_ring, screen_settings_display,
+               screen_lights, screen_settings_ring, screen_settings_wifi, screen_settings_wifi_scan,
+               screen_settings_machine_host, screen_settings_machine_pen,
+               screen_settings_machine_terrapixel, screen_settings_display,
+               screen_settings_display_sleep,
                screen_job_progress, screen_estop, screen_alarm, screen_keyboard,
                screen_about, screen_brand):
         name, parts = fn()
