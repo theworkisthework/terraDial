@@ -120,6 +120,35 @@ lv_obj_t *uiMakeButton(lv_obj_t *parent, const char *text, lv_obj_t **outLabel)
     return btn;
 }
 
+lv_obj_t *uiMakeTextField(lv_obj_t *parent, const char *labelText, lv_obj_t **outValue)
+{
+    lv_obj_t *row = uiMakeRow(parent, labelText);
+
+    lv_obj_t *box = lv_obj_create(row);
+    lv_obj_set_size(box, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(box, Palette::bgPanel(), 0);
+    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(box, Palette::border(), 0);
+    lv_obj_set_style_border_width(box, 1, 0);
+    // terraForge's focus:border-accent, shown while the finger is down --
+    // the keyboard that opens next covers the field, so press is the only
+    // moment a "focused" look could be seen.
+    lv_obj_set_style_border_color(box, Palette::accent(), LV_STATE_PRESSED);
+    lv_obj_set_style_radius(box, 8, 0);
+    lv_obj_set_style_pad_hor(box, 10, 0);
+    lv_obj_set_style_pad_ver(box, 6, 0);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *value = lv_label_create(box);
+    lv_obj_set_width(value, lv_pct(100));
+    lv_label_set_long_mode(value, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(value, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(value, Palette::text(), 0);
+    if (outValue) *outValue = value;
+    return box;
+}
+
 UiRingIconSize uiRingIconSize(float nearness, UiRingIconSize current)
 {
     if (nearness > (current >= UiRingIconLarge ? 0.80f : 0.90f)) return UiRingIconLarge;

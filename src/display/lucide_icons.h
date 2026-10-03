@@ -57,3 +57,5 @@ LV_FONT_DECLARE(lucide_32)
 #define LUCIDE_REFRESH_CW         "\xEE\x85\x85" // refresh-cw
 #define LUCIDE_TRIANGLE_ALERT     "\xEE\x86\x93" // triangle-alert
 #define LUCIDE_TRASH_2            "\xEE\x86\x8E" // trash-2
+#define LUCIDE_ARROW_UP_DOWN      "\xEE\x8D\xBD" // arrow-up-down
+#define LUCIDE_ROTATE_CCW         "\xEE\x85\x88" // rotate-ccw

@@ -27,7 +27,11 @@ static const int JOG_STEP_COUNT = 4;
 // legal Z move without a line of this file appearing to change.
 static const float JOG_MAX_Z_MM = 1.0f;
 
-// Pen up/down: fixed 5mm relative Z jog -- not one of the JOG_STEPS
-// presets above, just a flat button (no step-size selector).
-static const float PEN_JOG_MM = 5.0f;
-static const float PEN_JOG_FEED = 1500.0f; // mm/min
+// Pen up/down: the G-code line the Pen screen sends for each state, editable
+// under Settings > Machine. Same defaults as terraForge's terraPen machine
+// config, so a plot started from terraForge and a pen lifted from the panel
+// agree on where "up" is. Absolute rather than a relative jog: sending one
+// twice is harmless, so the panel's idea of the pen state can't drift away
+// from the machine's.
+#define PEN_UP_CMD "G0Z5"
+#define PEN_DOWN_CMD "G0Z0"

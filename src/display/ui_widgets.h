@@ -35,6 +35,15 @@ lv_obj_t *uiMakeSwitch(lv_obj_t *parent, bool checked);
 // so callers can retitle it later.
 lv_obj_t *uiMakeButton(lv_obj_t *parent, const char *text, lv_obj_t **outLabel = nullptr);
 
+// Labelled single-line text field, styled after terraForge's form inputs
+// (its `inputCls`: muted caption above a bg-panel box with a 1px border and
+// rounded-lg corners) so an editable value looks editable here too. The box
+// is display-only -- tapping it fires LV_EVENT_CLICKED on the returned
+// object, and the caller opens the radial keyboard from that. outValue
+// receives the value label so the caller can set and refresh its text;
+// long values are cut short with "..." rather than wrapped.
+lv_obj_t *uiMakeTextField(lv_obj_t *parent, const char *labelText, lv_obj_t **outValue);
+
 // Icon size for a radial-ring chip, picked from its `nearness` (1 at the
 // top slot, 0 at the far edge -- see RadialRing::setOnItemStyle).
 //

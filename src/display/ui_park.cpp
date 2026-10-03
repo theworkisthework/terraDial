@@ -178,10 +178,10 @@ void uiParkTrigger()
 
     // Lift before homing, not after: homing drags the carriage the length of
     // both axes, and a pen left down draws a line across the finished plot on
-    // the way. uiPenToggle() rather than a raw Z jog so the Pen screen's
-    // segmented control still shows the truth afterwards.
+    // the way. uiPenToggle() rather than sending the pen-up command directly
+    // so the Pen screen's segmented control still shows the truth afterwards.
     //
-    // Skipped when alarmed, because an alarmed machine rejects jogs outright
+    // Skipped when alarmed, because an alarmed machine rejects motion outright
     // -- the lift would be swallowed and we would sit waiting for motion that
     // was never going to happen. home() unlocks before it homes anyway, and a
     // pen that is already clear of the bed is the common case after a plot.

@@ -97,6 +97,8 @@ ICONS = [
     "refresh-cw",
     "triangle-alert",
     "trash-2",
+    "arrow-up-down",    # swap pen up/down commands (Settings > Machine)
+    "rotate-ccw",       # reset pen commands to defaults (Settings > Machine)
 ]
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

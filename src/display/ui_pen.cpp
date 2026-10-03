@@ -31,13 +31,23 @@ namespace
 
     void setPenUp(bool up)
     {
-        if (up == penIsUp) return;
-        penIsUp = up;
-        // Flat relative Z jog (distance/feed editable on the Settings
-        // screen). Positive when the new state is "up" (away from the bed).
+        // A pen command isn't a $J= jog, so FluidNC won't refuse it mid-plot
+        // the way it did the old relative jog -- it would land in the middle
+        // of the job's own pen moves. Refuse it here instead. Not on plain
+        // Run: FluidNC reports that for our own pen move too, and up-then-
+        // down in quick succession should just queue.
+        const FluidNCStatus &st = fluidNC.status();
+        if (st.jobActive || st.mode == MachineMode::Hold) return;
+
+        // No "already in that state" early-out: the commands are absolute
+        // (Settings > Machine), so re-sending one is harmless -- and tapping
+        // the lit segment again is how you resync after the machine was moved
+        // from elsewhere, or after the up/down commands were swapped.
         const AppSettings &cfg = Config::get();
-        float deltaMm = penIsUp ? cfg.penJogMm : -cfg.penJogMm;
-        fluidNC.jog('Z', deltaMm, cfg.penJogFeed);
+        const char *cmd = up ? cfg.penUpCmd : cfg.penDownCmd;
+        if (!cmd[0]) return; // cleared in Settings -- nothing to send
+        penIsUp = up;
+        fluidNC.sendGcodeLine(cmd);
         restyleSegments();
     }
 
