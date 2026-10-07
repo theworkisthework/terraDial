@@ -979,6 +979,8 @@ void uiSpiroHandleRotate(int32_t delta)
     restartPreview();
 }
 
+bool uiSpiroPlotActive() { return plot.active; }
+
 void uiSpiroUpdate()
 {
     pumpPlot(); // every iteration: keeps the plotter's queue topped up

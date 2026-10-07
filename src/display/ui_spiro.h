@@ -20,6 +20,9 @@ void uiSpiroHandleRotate(int32_t delta);
 // machine, so leaving the screen doesn't abandon a drawing half-way.
 void uiSpiroUpdate();
 
+// A spirograph plot is lifting, homing or streaming.
+bool uiSpiroPlotActive();
+
 // For the demo tour (demo_tour.cpp). begin() puts a known, quick-to-plot
 // pattern up (a three-petal flower) after keeping whatever was there, and
 // end() puts that back -- the tour shows the toy off without leaving a

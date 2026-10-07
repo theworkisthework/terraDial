@@ -21,6 +21,9 @@ namespace
     const uint16_t EXTERNAL_ABOVE_MV = 4450;
     const uint16_t BATTERY_BELOW_MV = 4350;
 
+    // How far the percentage must climb before it's believed (see sample()).
+    const uint8_t RISE_MARGIN_PCT = 4;
+
     // Single-cell LiPo, voltage at rest -> charge. Coarse by nature: the
     // curve is flat through the middle and sags under load (the backlight
     // and Wi-Fi are load), so this is a fuel gauge, not a meter.
@@ -54,19 +57,36 @@ namespace
         for (int i = 0; i < SAMPLES_PER_READ; i++) sum += analogReadMilliVolts(PIN_BATT_ADC);
         float mv = (float)sum / SAMPLES_PER_READ * BATT_ADC_DIVIDER;
 
-        // Smoothed, because the reading tracks the load: a Wi-Fi burst or
-        // the backlight coming on dips it for a moment, and a raw reading
-        // would walk the percentage up and down with them. The first
-        // reading is taken as-is so boot doesn't show a climb from zero.
-        smoothedMv = smoothedMv == 0 ? mv : smoothedMv * 0.8f + mv * 0.2f;
+        // Plugging in or unplugging is a step, not a dip: start the
+        // smoothing again from the new level. Easing down from USB's 5V
+        // instead read as a full cell for the first several samples after
+        // unplugging and then a quick slide -- "100%, then 90% a minute
+        // later" -- that had nothing to do with the cell.
+        bool stepped = st.external ? mv < BATTERY_BELOW_MV : mv > EXTERNAL_ABOVE_MV;
+
+        // Otherwise smoothed, because the reading tracks the load: a Wi-Fi
+        // burst or the backlight coming on dips it for a moment, and a raw
+        // reading would walk the percentage up and down with them. The
+        // first reading is taken as-is so boot doesn't show a climb from
+        // zero.
+        smoothedMv = (smoothedMv == 0 || stepped) ? mv : smoothedMv * 0.8f + mv * 0.2f;
         st.millivolts = (uint16_t)smoothedMv;
 
+        bool wasExternal = st.external;
         if (!st.external && st.millivolts > EXTERNAL_ABOVE_MV) st.external = true;
         else if (st.external && st.millivolts < BATTERY_BELOW_MV) st.external = false;
 
         // On USB the rail says nothing about the cell, so the last
         // on-battery estimate stands rather than reading 100%.
-        if (!st.external) st.percent = percentFor(st.millivolts);
+        if (st.external) return;
+
+        // On battery the cell only runs down, so the figure only goes
+        // down too -- except by a clear margin, which is a load easing off
+        // (the backlight going out at sleep lifts the voltage) rather than
+        // charge appearing. Without this it ticks up and down a percent at
+        // a time with every change in load.
+        uint8_t pct = percentFor(st.millivolts);
+        if (wasExternal || pct < st.percent || pct >= st.percent + RISE_MARGIN_PCT) st.percent = pct;
     }
 }
 

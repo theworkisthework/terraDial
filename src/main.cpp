@@ -29,6 +29,7 @@
 #include "net/wifi_manager.h"
 #include "net/ota_updater.h"
 #include <CST816D.h>
+#include <WiFi.h>
 
 // ---- terraDial: round-screen control panel for terraPen ----
 // See the project plan for the staged build order; this file wires
@@ -323,8 +324,62 @@ void setup()
     Serial.println("terraDial stage-2 bring-up ready");
 }
 
+// While the screen sleeps, nobody is looking at it, so stop paying for it:
+//  - the panel itself goes into its own sleep (the backlight is already off,
+//    but the controller keeps scanning its RAM out to the glass without it),
+//  - the CPU drops from 240MHz to 80MHz -- the lowest Wi-Fi allows,
+//  - and loop() idles longer between passes (see below).
+// A plot carries on regardless: networkTask still streams, just at 80MHz,
+// which is plenty for a WebSocket.
+//
+// Wi-Fi power-save is handled separately, in updateWifiPowerSave().
+static bool lowPower = false;
+
+// Wi-Fi power-saves between beacons only while the screen is asleep AND the
+// machine has nothing on. Modem sleep stays associated and the router holds
+// traffic for it, so it shouldn't cost the connection -- but a dropped
+// connection mid-plot can take the plot with it (FluidNC has been seen to
+// fall over when a client reconnects mid-job), so while anything is running
+// the radio stays at full power, screen asleep or not. Awake it's always full
+// power anyway, for a snappy status stream (wifi_manager.cpp).
+static bool wifiSaving = false;
+
+static void updateWifiPowerSave()
+{
+    const FluidNCStatus &st = fluidNC.status();
+    bool busy = st.jobActive || uiSpiroPlotActive() || st.mode == MachineMode::Run ||
+                st.mode == MachineMode::Hold || st.mode == MachineMode::Homing;
+    bool want = lowPower && !busy;
+    if (want == wifiSaving) return;
+    wifiSaving = want;
+    WiFi.setSleep(want);
+}
+
+static void setLowPower(bool on)
+{
+    lowPower = on;
+    if (on)
+    {
+        gfx.sleep();
+        setCpuFrequencyMhz(80);
+    }
+    else
+    {
+        setCpuFrequencyMhz(240);
+        gfx.wakeup();
+        // The panel's RAM survives its sleep, but repaint anyway: anything
+        // that changed while it slept was drawn into a sleeping controller.
+        lv_obj_invalidate(lv_scr_act());
+        lv_obj_invalidate(lv_layer_top());
+    }
+    Serial.printf("[power] %s\n", on ? "low power (screen asleep)" : "full power");
+}
+
 void loop()
 {
+    if (ScreenSleep::isAsleep() != lowPower) setLowPower(ScreenSleep::isAsleep());
+    updateWifiPowerSave();
+
     lv_timer_handler();
     jogWheel.update();
     Battery::update(); // time-gated to every 2s inside
@@ -348,7 +403,10 @@ void loop()
     // FluidNC calls a jog and a plot the same thing (Run); this is the half
     // of the distinction the ring can't work out for itself.
     panelRing.setPlotting(fluidNC.status().jobActive);
-    panelRing.update();
+    // An on-screen ring with the screen asleep is animating for nobody --
+    // and every frame of it is a redraw and a panel write. LEDs stay lit
+    // through sleep on purpose, so the CrowPanel's carries on.
+    if (!(BOARD_HAS_SCREEN_RING && lowPower)) panelRing.update();
 
     static uint32_t lastStatusUiUpdate = 0;
     if (millis() - lastStatusUiUpdate > STATUS_UI_REFRESH_MS)
@@ -382,5 +440,8 @@ void loop()
     // left the WiFi/BT background task (and the I2C touch driver's own
     // timing) too little room on this core, which made things feel
     // laggier, not snappier.
-    delay(5);
+    // Asleep, nothing on screen needs 5ms turns: 20ms still catches a touch
+    // or a knob turn to wake it well inside a blink (the knob itself is
+    // sampled on its own timer, so no detents are lost either way).
+    delay(lowPower ? 20 : 5);
 }
