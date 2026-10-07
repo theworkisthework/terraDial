@@ -326,6 +326,7 @@ void loop()
     jogWheel.update();
     Battery::update(); // time-gated to every 2s inside
     DemoTour::update(); // before UiNav, so a scripted input lands this iteration
+    uiJobProgressSample(fluidNC.status()); // every report, not every 150ms refresh
     UiNav::update(); // also drives uiLightsUpdate(), but only while Lights is on screen
     DemoBadge::update();
 

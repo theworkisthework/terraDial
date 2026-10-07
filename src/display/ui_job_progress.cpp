@@ -3,6 +3,7 @@
 #include "lucide_icons.h"
 #include "palette.h"
 #include "ui_screen_shell.h"
+#include "plot_mirror.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -19,6 +20,56 @@ namespace
     lv_obj_t *percentLbl = nullptr;
     lv_obj_t *timingLbl = nullptr;
     lv_obj_t *pauseLbl = nullptr;
+
+    // -- plot mirror vs. controls --
+    //
+    // Once there's a drawing to show, it IS the screen: the plot growing on
+    // the dial alongside the plot growing on the paper, with the progress
+    // arc round it and a small percentage. The usual readouts and the
+    // pause/stop buttons come up over a dimmed drawing on a tap, and get out
+    // of the way again on their own, like a video player's controls. They
+    // stay up while the job is paused, since resuming is the next thing
+    // you'll want.
+    lv_obj_t *mirror = nullptr;
+    lv_obj_t *controls = nullptr; // filename, timing, percentage, buttons
+    lv_obj_t *pctPill = nullptr;  // the percentage, in drawing view
+    bool controlsUp = false;
+    uint32_t controlsUpAt = 0;
+    const uint32_t CONTROLS_HIDE_MS = 6000;
+
+    void showControls(bool up)
+    {
+        controlsUp = up;
+        controlsUpAt = millis();
+    }
+
+    void screenTapCb(lv_event_t *e)
+    {
+        (void)e;
+        // Only reached by taps on nothing in particular: the buttons take
+        // their own clicks. Without a drawing there's nothing to toggle to.
+        if (PlotMirror::hasDrawing()) showControls(!controlsUp);
+    }
+
+    void applyView(MachineMode mode)
+    {
+        if (controlsUp && mode != MachineMode::Hold && millis() - controlsUpAt > CONTROLS_HIDE_MS)
+            controlsUp = false;
+
+        bool drawingView = PlotMirror::hasDrawing() && !controlsUp;
+        if (drawingView)
+        {
+            lv_obj_add_flag(controls, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(pctPill, LV_OBJ_FLAG_HIDDEN);
+        }
+        else
+        {
+            lv_obj_clear_flag(controls, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(pctPill, LV_OBJ_FLAG_HIDDEN);
+        }
+        // Dimmed under the controls rather than hidden: it's still the job.
+        lv_obj_set_style_opa(mirror, drawingView ? LV_OPA_COVER : LV_OPA_20, 0);
+    }
 
     // -- elapsed / ETA --
     //
@@ -91,11 +142,17 @@ namespace
             snprintf(buf, n, "%lu:%02lu", (unsigned long)(secs / 60), (unsigned long)(secs % 60));
     }
 
-    void pauseBtnCb(lv_event_t *e) { (void)e; uiJobProgressTogglePause(); }
+    void pauseBtnCb(lv_event_t *e)
+    {
+        (void)e;
+        showControls(true); // using the controls keeps them up
+        uiJobProgressTogglePause();
+    }
 
     void stopBtnCb(lv_event_t *e)
     {
         (void)e;
+        showControls(true);
         // FluidNC has no separate "abort job cleanly" primitive -- same
         // feed-hold + soft-reset combo as E-Stop (ui_estop.cpp).
         fluidNC.feedHold();
@@ -107,6 +164,13 @@ lv_obj_t *uiJobProgressCreate()
 {
     lv_obj_t *scr = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr, Palette::bgApp(), 0);
+    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(scr, screenTapCb, LV_EVENT_CLICKED, NULL);
+
+    // First, so the progress ring is drawn over its square corners.
+    // Sized to the ring's inside edge: 224 less two 12px arcs.
+    mirror = PlotMirror::create(scr, px(200));
+    lv_obj_center(mirror);
 
     ring = lv_arc_create(scr);
     lv_obj_set_size(ring, px(224), px(224));
@@ -122,7 +186,16 @@ lv_obj_t *uiJobProgressCreate()
     lv_obj_remove_style(ring, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(ring, LV_OBJ_FLAG_CLICKABLE);
 
-    filenameLbl = lv_label_create(scr);
+    controls = lv_obj_create(scr);
+    lv_obj_remove_style_all(controls);
+    lv_obj_set_size(controls, px(240), px(240));
+    lv_obj_center(controls);
+    // A container only: taps between the buttons fall through to the
+    // screen, which is what toggles the view.
+    lv_obj_clear_flag(controls, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(controls, LV_OBJ_FLAG_SCROLLABLE);
+
+    filenameLbl = lv_label_create(controls);
     lv_obj_set_style_text_font(filenameLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(filenameLbl, Palette::textMuted(), 0);
     lv_obj_set_width(filenameLbl, px(160));
@@ -135,17 +208,17 @@ lv_obj_t *uiJobProgressCreate()
     // Sits ABOVE the percentage, not below it: below is where the pause and
     // stop buttons are (y +15..+73), and a line long enough to hold both the
     // clock and the estimate is wide enough to run into both of them.
-    timingLbl = lv_label_create(scr);
+    timingLbl = lv_label_create(controls);
     lv_obj_set_style_text_font(timingLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(timingLbl, Palette::textMuted(), 0);
     lv_obj_align(timingLbl, LV_ALIGN_CENTER, 0, px(-40));
 
-    percentLbl = lv_label_create(scr);
+    percentLbl = lv_label_create(controls);
     lv_obj_set_style_text_font(percentLbl, &UI_FONT_32, 0);
     lv_obj_set_style_text_color(percentLbl, lv_color_white(), 0);
     lv_obj_align(percentLbl, LV_ALIGN_CENTER, 0, px(-14));
 
-    lv_obj_t *pauseBtn = lv_btn_create(scr);
+    lv_obj_t *pauseBtn = lv_btn_create(controls);
     lv_obj_set_size(pauseBtn, px(58), px(58));
     lv_obj_set_style_radius(pauseBtn, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(pauseBtn, Palette::bgSecondary(), 0);
@@ -156,7 +229,7 @@ lv_obj_t *uiJobProgressCreate()
     lv_obj_set_style_text_font(pauseLbl, &UI_ICONS_24, 0);
     lv_obj_center(pauseLbl);
 
-    lv_obj_t *stopBtn = lv_btn_create(scr);
+    lv_obj_t *stopBtn = lv_btn_create(controls);
     lv_obj_set_size(stopBtn, px(58), px(58));
     lv_obj_set_style_radius(stopBtn, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(stopBtn, Palette::alert(), 0); // same feedHold+softReset as E-Stop, so same colour
@@ -167,6 +240,20 @@ lv_obj_t *uiJobProgressCreate()
     lv_obj_set_style_text_font(stopLbl, &UI_ICONS_24, 0);
     lv_obj_set_style_text_color(stopLbl, Palette::accentFg(), 0);
     lv_obj_center(stopLbl);
+
+    // Drawing view's percentage: low in the circle, clear of the back
+    // button below it.
+    pctPill = lv_label_create(scr);
+    lv_obj_set_style_text_font(pctPill, &UI_FONT_12, 0);
+    lv_obj_set_style_text_color(pctPill, Palette::text(), 0);
+    lv_obj_set_style_bg_color(pctPill, Palette::bgSecondary(), 0);
+    lv_obj_set_style_bg_opa(pctPill, LV_OPA_80, 0);
+    lv_obj_set_style_radius(pctPill, px(9), 0);
+    lv_obj_set_style_pad_hor(pctPill, px(8), 0);
+    lv_obj_set_style_pad_ver(pctPill, px(2), 0);
+    lv_obj_clear_flag(pctPill, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(pctPill, LV_ALIGN_CENTER, 0, px(62));
+    lv_obj_add_flag(pctPill, LV_OBJ_FLAG_HIDDEN);
 
     addBackButton(scr);
 
@@ -183,6 +270,10 @@ void uiJobProgressUpdate(const FluidNCStatus &st)
     char buf[8];
     snprintf(buf, sizeof(buf), "%d%%", pct);
     lv_label_set_text(percentLbl, buf);
+    lv_label_set_text(pctPill, buf);
+
+    PlotMirror::refresh();
+    applyView(st.mode);
 
     // Restart the clock on a new job -- either the job flag going up, or the
     // filename changing under us (back-to-back runs can do that without
@@ -230,6 +321,11 @@ void uiJobProgressUpdate(const FluidNCStatus &st)
     const char *name = st.jobFilename[0] ? st.jobFilename : "--";
     if (strcmp(lv_label_get_text(filenameLbl), name) != 0) lv_label_set_text(filenameLbl, name);
     lv_label_set_text(pauseLbl, st.mode == MachineMode::Hold ? LUCIDE_PLAY : LUCIDE_PAUSE);
+}
+
+void uiJobProgressSample(const FluidNCStatus &st)
+{
+    PlotMirror::sample(st);
 }
 
 void uiJobProgressTogglePause()
