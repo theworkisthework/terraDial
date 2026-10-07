@@ -17,6 +17,11 @@ scaled to ~128px, so a faithful scaling would render the mark invisible. The
 stroke is clamped to a minimum width in output pixels instead -- the mark
 stays legible, at the cost of being slightly heavier than the print artwork.
 
+One bitmap per panel resolution (SIZES), so the mark is drawn 1:1 at the
+same proportion of the face on every board: 128px on the 240px panel, 192px
+on the 360px one. icon_logo.cpp holds both and compiles in the one matching
+the build's PANEL_RES.
+
 Usage: python tools/gen_logo.py [--preview]
 Writes: src/display/icon_logo.{h,cpp}
 """
@@ -29,10 +34,12 @@ import urllib.request
 SVG_URL = ("https://raw.githubusercontent.com/theworkisthework/"
            "terrapen-identity/main/Logo/TP-Logo-Animated.svg")
 VIEWBOX = 450.0
-SIZE = 128            # output px, drawn 1:1 on the panel
+# panel resolution -> output px, drawn 1:1 on that panel
+SIZES = {240: 128, 360: 192}
+BASE_SIZE = 128
 SUPERSAMPLE = 3
 SVG_STROKE = 3.0
-MIN_STROKE_PX = 1.5   # see module docstring
+MIN_STROKE_PX = 1.5   # at BASE_SIZE, and scaled with it -- see module docstring
 
 
 def fetch_path_d():
@@ -134,7 +141,7 @@ def dist_to_segment(px, py, a, b):
 
 def rasterise(polys, size):
     scale = VIEWBOX / size                       # viewBox units per output px
-    radius_px = max(MIN_STROKE_PX, SVG_STROKE / scale) / 2.0
+    radius_px = max(MIN_STROKE_PX * size / BASE_SIZE, SVG_STROKE / scale) / 2.0
     radius = radius_px * scale                   # back into viewBox units
 
     # Bucket segments by row band so each pixel only tests nearby geometry --
@@ -174,27 +181,31 @@ def main():
     print("parsed %d subpath(s), %d points"
           % (len(polys), sum(len(p) for p in polys)))
 
-    rows = rasterise(polys, SIZE)
+    maps = []
+    for panel, size in sorted(SIZES.items()):
+        rows = rasterise(polys, size)
 
-    if "--preview" in sys.argv:
-        step = max(1, SIZE // 64)
-        for y in range(0, SIZE, step * 2):
-            print("".join(" .:-=+*#%@"[min(9, rows[y][x] // 26)]
-                          for x in range(0, SIZE, step)))
+        if "--preview" in sys.argv:
+            step = max(1, size // 64)
+            for y in range(0, size, step * 2):
+                print("".join(" .:-=+*#%@"[min(9, rows[y][x] // 26)]
+                              for x in range(0, size, step)))
 
-    flat = [v for row in rows for v in row]
-    body = ""
-    for i in range(0, len(flat), 12):
-        body += "    " + " ".join("0x%02x," % v for v in flat[i:i + 12]) + "\n"
+        flat = [v for row in rows for v in row]
+        body = ""
+        for i in range(0, len(flat), 12):
+            body += "    " + " ".join("0x%02x," % v for v in flat[i:i + 12]) + "\n"
+        maps.append((panel, size, body))
 
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     base = os.path.join(here, "src", "display", "icon_logo")
 
-    open(base + ".h", "w").write('''#pragma once
+    open(base + ".h", "w", encoding="utf-8", newline="\n").write('''#pragma once
 #include <lvgl.h>
 
 // The terraPen logo (theworkisthework/terrapen-identity, TP-Logo-Animated.svg)
-// rasterised to a %dx%d LV_IMG_CF_ALPHA_8BIT bitmap.
+// rasterised to an LV_IMG_CF_ALPHA_8BIT bitmap: %s, matching
+// the panel this build is for (PANEL_RES in pins.h).
 //
 // Alpha-only, so it has no colour of its own -- LVGL paints it with the
 // object's `img_recolor`. That's how it reads correctly on this panel: the
@@ -207,11 +218,12 @@ def main():
 //
 // Regenerate with: python tools/gen_logo.py
 extern const lv_img_dsc_t iconLogo;
-''' % (SIZE, SIZE))
+''' % ", ".join("%dx%d on the %dpx panel" % (size, size, panel) for panel, size, _ in maps))
 
-    open(base + ".cpp", "w").write('''#include "icon_logo.h"
+    parts = []
+    for n, (panel, size, body) in enumerate(maps):
+        parts.append('''%s PANEL_RES == %d
 
-// Generated -- see icon_logo.h. One byte of alpha per pixel.
 static const uint8_t ICON_LOGO_MAP[] = {
 %s};
 
@@ -226,9 +238,20 @@ const lv_img_dsc_t iconLogo = {
     sizeof(ICON_LOGO_MAP),
     ICON_LOGO_MAP,
 };
-''' % (body, SIZE, SIZE))
-    print("wrote src/display/icon_logo.{h,cpp}  (%dx%d, %d bytes)"
-          % (SIZE, SIZE, SIZE * SIZE))
+''' % ("#if" if n == 0 else "\n#elif", panel, body, size, size))
+
+    open(base + ".cpp", "w", encoding="utf-8", newline="\n").write('''#include "icon_logo.h"
+#include "pins.h"
+
+// Generated -- see icon_logo.h. One byte of alpha per pixel.
+
+%s
+#else
+#error "No logo bitmap for this PANEL_RES -- add its size to SIZES in tools/gen_logo.py"
+#endif
+''' % "".join(parts))
+    print("wrote src/display/icon_logo.{h,cpp}  (%s)"
+          % ", ".join("%dx%d" % (size, size) for _, size, _ in maps))
 
 
 if __name__ == "__main__":

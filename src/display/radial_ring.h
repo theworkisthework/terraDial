@@ -1,5 +1,6 @@
 #pragma once
 #include <lvgl.h>
+#include "ui_scale.h"
 
 // The home dial's rotating ring, as a reusable widget.
 //
@@ -24,9 +25,9 @@ public:
     // original evenly-spaced tuning; every screen now overrides them, since
     // each has a different hub size to clear and its own spread to suit.
     void create(lv_obj_t *parent,
-                lv_coord_t radius = 74,
-                lv_coord_t sizeNear = 62,
-                lv_coord_t sizeFar = 30,
+                lv_coord_t radius = px(74),
+                lv_coord_t sizeNear = px(62),
+                lv_coord_t sizeFar = px(30),
                 lv_opa_t opaNear = LV_OPA_COVER,
                 lv_opa_t opaFar = 110);
 
@@ -131,9 +132,9 @@ private:
     void assignSlots(float offsetDeg);
     int selectedIndex_ = 0;
 
-    lv_coord_t radius_ = 74;
-    lv_coord_t sizeNear_ = 62;
-    lv_coord_t sizeFar_ = 30;
+    lv_coord_t radius_ = px(74);
+    lv_coord_t sizeNear_ = px(62);
+    lv_coord_t sizeFar_ = px(30);
     lv_opa_t opaNear_ = LV_OPA_COVER;
     lv_opa_t opaFar_ = 110;
 

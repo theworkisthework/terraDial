@@ -24,6 +24,18 @@ lv_obj_t *uiMakeRow(lv_obj_t *parent, const char *labelText = nullptr, lv_obj_t 
 // start clipping rows against the curve.
 lv_obj_t *uiMakePanel(lv_obj_t *parent, const char *title);
 
+// Scroll a uiMakePanel page by `delta` knob detents (positive = down the
+// page). Every screen that scrolls a page from the knob goes through this,
+// so they all move the same distance per detent.
+//
+// Not just lv_obj_scroll_by(..., LV_ANIM_ON): that starts each animation
+// from wherever the previous one has got to and throws the rest of it away,
+// so on a quick spin most of every step was lost -- the cause of the About
+// page crawling however fast the knob turned. This keeps the destination
+// instead and adds each detent to it, so the page ends up exactly
+// delta * step further down, however fast the detents arrive.
+void uiKnobScroll(lv_obj_t *page, int32_t delta);
+
 // Palette-styled controls. LVGL's built-in theme paints sliders/switches in
 // its own default blue-on-grey, which is why the Lights and Settings
 // screens looked unstyled next to the hand-styled dial/cards -- they were

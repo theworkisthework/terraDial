@@ -1,4 +1,5 @@
 #include "ui_pen.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "../net/fluidnc_client.h"
 #include "../config/settings.h"
@@ -119,37 +120,37 @@ lv_obj_t *uiPenCreate()
     // reads at a glance rather than needing to infer it from a single
     // button's label.
     lv_obj_t *seg = lv_obj_create(shell.content);
-    lv_obj_set_size(seg, 140, 64); // was 170x40 -- taller for an easier touch target (170 also overflowed the shell's ~142px-wide safe content area)
+    lv_obj_set_size(seg, px(140), px(64)); // was 170x40 -- taller for an easier touch target (170 also overflowed the shell's ~142px-wide safe content area)
     lv_obj_set_style_bg_color(seg, Palette::bgPanel(), 0);
-    lv_obj_set_style_radius(seg, 20, 0);
+    lv_obj_set_style_radius(seg, px(20), 0);
     lv_obj_set_style_border_width(seg, 0, 0);
-    lv_obj_set_style_pad_all(seg, 3, 0);
+    lv_obj_set_style_pad_all(seg, px(3), 0);
     lv_obj_clear_flag(seg, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(seg, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(seg, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     upSeg = lv_obj_create(seg);
     lv_obj_set_size(upSeg, lv_pct(48), lv_pct(100));
-    lv_obj_set_style_radius(upSeg, 17, 0);
+    lv_obj_set_style_radius(upSeg, px(17), 0);
     lv_obj_set_style_border_width(upSeg, 0, 0);
     lv_obj_clear_flag(upSeg, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(upSeg, upSegCb, LV_EVENT_CLICKED, NULL);
     upLbl = lv_label_create(upSeg);
     lv_label_set_text(upLbl, "Pen\nup");
     lv_obj_set_style_text_align(upLbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(upLbl, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(upLbl, &UI_FONT_16, 0);
     lv_obj_center(upLbl);
 
     downSeg = lv_obj_create(seg);
     lv_obj_set_size(downSeg, lv_pct(48), lv_pct(100));
-    lv_obj_set_style_radius(downSeg, 17, 0);
+    lv_obj_set_style_radius(downSeg, px(17), 0);
     lv_obj_set_style_border_width(downSeg, 0, 0);
     lv_obj_clear_flag(downSeg, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(downSeg, downSegCb, LV_EVENT_CLICKED, NULL);
     downLbl = lv_label_create(downSeg);
     lv_label_set_text(downLbl, "Pen\ndown");
     lv_obj_set_style_text_align(downLbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(downLbl, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(downLbl, &UI_FONT_16, 0);
     lv_obj_center(downLbl);
 
     restyleSegments();

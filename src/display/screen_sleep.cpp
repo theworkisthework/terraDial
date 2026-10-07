@@ -1,4 +1,5 @@
 #include "screen_sleep.h"
+#include "ui_scale.h"
 #include <Arduino.h>
 #include "lgfx_config.h" // backlightSet()
 #include "../config/settings.h"

@@ -1,4 +1,5 @@
 #include "ui_estop.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "../net/fluidnc_client.h"
 #include "palette.h"
@@ -90,35 +91,35 @@ lv_obj_t *uiEstopCreate()
     // landed on top of the red circle, since a 172px circle centered on a
     // 240px screen already reaches down to y=206.
     estopBtn = lv_btn_create(scr);
-    lv_obj_set_size(estopBtn, 156, 156);
+    lv_obj_set_size(estopBtn, px(156), px(156));
     lv_obj_set_style_radius(estopBtn, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(estopBtn, Palette::alert(), 0);
     // Lights up under the finger. Without it the only sign the panel felt
     // the touch at all was the machine stopping -- which is the one piece of
     // feedback you cannot see while you are looking at the screen.
     lv_obj_set_style_bg_color(estopBtn, lv_color_white(), LV_STATE_PRESSED);
-    lv_obj_align(estopBtn, LV_ALIGN_CENTER, 0, -14);
+    lv_obj_align(estopBtn, LV_ALIGN_CENTER, 0, px(-14));
     lv_obj_add_event_cb(estopBtn, estopPressCb, LV_EVENT_PRESSED, NULL);
 
     lv_obj_t *iconLbl = lv_label_create(estopBtn);
     lv_label_set_text(iconLbl, LUCIDE_OCTAGON_X); // matches this item's dial icon
-    lv_obj_set_style_text_font(iconLbl, &lucide_24, 0);
+    lv_obj_set_style_text_font(iconLbl, &UI_ICONS_24, 0);
     lv_obj_set_style_text_color(iconLbl, lv_color_white(), 0);
-    lv_obj_align(iconLbl, LV_ALIGN_CENTER, 0, -30);
+    lv_obj_align(iconLbl, LV_ALIGN_CENTER, 0, px(-30));
 
     nameLbl = lv_label_create(estopBtn);
     lv_label_set_text(nameLbl, "E-STOP");
-    lv_obj_set_style_text_font(nameLbl, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(nameLbl, &UI_FONT_18, 0);
     lv_obj_set_style_text_color(nameLbl, lv_color_white(), 0);
-    lv_obj_align(nameLbl, LV_ALIGN_CENTER, 0, -2);
+    lv_obj_align(nameLbl, LV_ALIGN_CENTER, 0, px(-2));
 
     subLbl = lv_label_create(estopBtn);
     lv_label_set_text(subLbl, "Feed hold\n+ soft reset");
     lv_obj_set_style_text_align(subLbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(subLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(subLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(subLbl, lv_color_white(), 0);
     lv_obj_set_style_text_opa(subLbl, LV_OPA_80, 0);
-    lv_obj_align(subLbl, LV_ALIGN_CENTER, 0, 32);
+    lv_obj_align(subLbl, LV_ALIGN_CENTER, 0, px(32));
 
     addBackButton(scr);
 

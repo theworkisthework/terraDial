@@ -2,6 +2,7 @@
 #include <lvgl.h>
 #include "pins.h"
 #include "version.h"
+#include "ui_scale.h"
 #include "config/settings.h"
 #include "display/lgfx_config.h"
 #include "display/ui_nav.h"
@@ -16,24 +17,29 @@
 #include "display/demo_badge.h"
 #include "display/demo_tour.h"
 #include "input/encoder.h"
+#include "input/haptics.h"
 #include "led/panel_ring.h"
 #include "net/demo_mode.h"
+#include "power/battery.h"
 #include "net/fluidnc_client.h"
 #include "net/terrapixel_client.h"
 #include "net/wifi_manager.h"
 #include "net/ota_updater.h"
 #include <CST816D.h>
 
-// ---- terraDial: CrowPanel round-screen control panel for terraPen ----
+// ---- terraDial: round-screen control panel for terraPen ----
 // See the project plan for the staged build order; this file wires
 // together display/touch/encoder/LEDs, the FluidNC + terraPixel clients,
-// and the backlight idle timeout.
+// and the backlight idle timeout. Which board it's wiring is pins.h's
+// business.
 
 static LGFX gfx;
 static CST816D touch(PIN_TOUCH_SDA, PIN_TOUCH_SCL, PIN_TOUCH_RST, PIN_TOUCH_INT);
 
-static const uint32_t SCREEN_W = 240;
-static const uint32_t SCREEN_H = 240;
+// LVGL runs at the panel's own resolution. The screens are designed on a
+// 240px grid and scale themselves to it -- see include/ui_scale.h.
+static const uint32_t SCREEN_W = PANEL_RES;
+static const uint32_t SCREEN_H = PANEL_RES;
 
 // "Full" is whatever the user set on the Settings > Display brightness
 // slider, not a fixed 100.
@@ -43,6 +49,19 @@ static const uint32_t STATUS_UI_REFRESH_MS = 150; // back to the original value 
 static lv_disp_draw_buf_t drawBuf;
 static lv_color_t *lvBuf0 = nullptr;
 static lv_color_t *lvBuf1 = nullptr;
+
+#if BOARD_PANEL_EVEN_WINDOWS
+// Widen every area LVGL redraws to even pixel boundaries. Waveshare's own
+// driver rounds to even for this ST77916 glass, and an odd window is the
+// classic way to get a one-pixel shear on these QSPI panels.
+static void roundArea(lv_disp_drv_t *, lv_area_t *area)
+{
+    area->x1 &= ~1;
+    area->y1 &= ~1;
+    area->x2 |= 1;
+    area->y2 |= 1;
+}
+#endif
 
 static void dispFlush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colorP)
 {
@@ -58,6 +77,12 @@ static void dispFlush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *co
     uint32_t h = area->y2 - area->y1 + 1;
     gfx.startWrite();
     gfx.setAddrWindow(area->x1, area->y1, w, h);
+    //
+    // It also has to be ONE writePixels() per area: LovyanGFX's ST77916
+    // driver starts every writePixels() with a fresh RAMWR, which puts the
+    // panel's write pointer back at the window's top-left. Split into rows,
+    // each row overwrote the first and the rest of the window kept stale
+    // panel RAM -- vertical streaks, flecked with white.
     gfx.writePixels((lgfx::rgb565_t *)&colorP->full, w * h);
     gfx.endWrite();
     lv_disp_flush_ready(disp);
@@ -71,20 +96,20 @@ static void dispFlush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *co
 static void rotateTouchCoords(uint16_t &x, uint16_t &y)
 {
 #if DISPLAY_ROTATION == 1
-    uint16_t nx = SCREEN_H - 1 - y;
+    uint16_t nx = PANEL_RES - 1 - y;
     uint16_t ny = x;
     x = nx;
     y = ny;
 #elif DISPLAY_ROTATION == 2
-    x = SCREEN_W - 1 - x;
-    y = SCREEN_H - 1 - y;
+    x = PANEL_RES - 1 - x;
+    y = PANEL_RES - 1 - y;
 #elif DISPLAY_ROTATION == 3
     // Confirmed on hardware: the straightforward 90deg transform here
     // landed taps exactly 180deg opposite the wedge that was actually
     // tapped (e.g. tapping "Stop" opened "Pen", exactly across the dial) --
     // this is that transform with the 180deg error already cancelled out,
     // not a generic "rotation 3" formula.
-    uint16_t nx = SCREEN_W - 1 - y;
+    uint16_t nx = PANEL_RES - 1 - y;
     uint16_t ny = x;
     x = nx;
     y = ny;
@@ -118,6 +143,11 @@ static void touchpadRead(lv_indev_drv_t *drv, lv_indev_data_t *data)
         return;
     }
 
+    // The controller can report a pixel or two past the panel's edge;
+    // clamp before rotating, where it would wrap around via the unsigned
+    // subtraction.
+    if (x >= PANEL_RES) x = PANEL_RES - 1;
+    if (y >= PANEL_RES) y = PANEL_RES - 1;
     rotateTouchCoords(x, y);
     data->state = LV_INDEV_STATE_PR;
     data->point.x = x;
@@ -130,6 +160,7 @@ static void touchpadRead(lv_indev_drv_t *drv, lv_indev_data_t *data)
 // value written to PIN_LCD_BACKLIGHT.
 static void initPowerRails()
 {
+#if BOARD_HAS_POWER_RAILS
     pinMode(PIN_POWER_RAIL_1, OUTPUT);
     digitalWrite(PIN_POWER_RAIL_1, HIGH);
     pinMode(PIN_POWER_RAIL_2, OUTPUT);
@@ -137,6 +168,7 @@ static void initPowerRails()
 
     pinMode(PIN_POWER_LED, OUTPUT);
     digitalWrite(PIN_POWER_LED, LOW);
+#endif
 }
 
 static void initTouchAndDisplay()
@@ -172,6 +204,9 @@ static void initTouchAndDisplay()
     dispDrv.hor_res = SCREEN_W;
     dispDrv.ver_res = SCREEN_H;
     dispDrv.flush_cb = dispFlush;
+#if BOARD_PANEL_EVEN_WINDOWS
+    dispDrv.rounder_cb = roundArea;
+#endif
     dispDrv.draw_buf = &drawBuf;
     lv_disp_drv_register(&dispDrv);
 
@@ -190,7 +225,7 @@ static void initTouchAndDisplay()
     // Set here rather than as LV_INDEV_DEF_SCROLL_LIMIT in lv_conf.h: LVGL 8
     // redefines that macro unconditionally in lv_hal_indev.h, so the lv_conf
     // value never reached lv_indev_drv_init() and the driver stayed at 10.
-    indevDrv.scroll_limit = 30;
+    indevDrv.scroll_limit = px(30); // a fingertip's roll, so it scales with the pixels
     lv_indev_drv_register(&indevDrv);
 }
 
@@ -254,12 +289,14 @@ void setup()
 {
     Serial.begin(115200);
     delay(300); // give the USB-CDC serial monitor time to attach before the first prints
-    Serial.printf("terraDial boot -- firmware %s\n", Version::firmware());
+    Serial.printf("terraDial boot -- firmware %s on %s\n", Version::firmware(), BOARD_NAME);
 
     Config::begin();
 
     initPowerRails();
     initTouchAndDisplay();
+    Haptics::begin(); // after touch: it shares the bus touch.begin() brings up
+    Battery::begin();
     jogWheel.begin();
 
     UiNav::begin();
@@ -282,6 +319,7 @@ void loop()
 {
     lv_timer_handler();
     jogWheel.update();
+    Battery::update(); // time-gated to every 2s inside
     DemoTour::update(); // before UiNav, so a scripted input lands this iteration
     UiNav::update(); // also drives uiLightsUpdate(), but only while Lights is on screen
     DemoBadge::update();

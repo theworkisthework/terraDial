@@ -1,4 +1,5 @@
 #include "demo_tour.h"
+#include "ui_scale.h"
 #include <Arduino.h>
 #include "../net/demo_mode.h"
 #include "../net/fluidnc_client.h"
@@ -13,7 +14,12 @@
 
 namespace
 {
-    // How long the panel must be left alone before the tour (re)starts.
+    // How long the panel must be left alone before the tour starts. Short
+    // the first time after demo mode is switched on -- whoever flicked the
+    // switch wants to see the tour, and 20s of nothing read as the panel
+    // hanging -- and long once it has run: by then a pause means a visitor
+    // is using the panel, and the tour shouldn't snatch it back mid-poke.
+    const uint32_t TOUR_FIRST_IDLE_MS = 3000;
     const uint32_t TOUR_IDLE_MS = 20000;
     // Gap between the tour's knob detents -- slow enough to follow.
     const uint32_t DETENT_MS = 450;
@@ -154,6 +160,7 @@ namespace
 
     bool running = false;
     bool demoWasOn = false;
+    bool startedSinceOn = false; // has the tour run since demo was switched on?
     uint32_t lastRealInputAt = 0;
 
     int stepIndex = 0;
@@ -255,12 +262,15 @@ namespace DemoTour
             // Just switched on (by hand): the idle clock starts now, so the
             // tour doesn't jump in under the finger that flicked the switch.
             demoWasOn = true;
+            startedSinceOn = false;
             lastRealInputAt = now;
         }
 
         if (!running)
         {
-            if (now - lastRealInputAt < TOUR_IDLE_MS) return;
+            uint32_t idleNeeded = startedSinceOn ? TOUR_IDLE_MS : TOUR_FIRST_IDLE_MS;
+            if (now - lastRealInputAt < idleNeeded) return;
+            startedSinceOn = true;
             start();
         }
 

@@ -1,4 +1,5 @@
 #include "ui_job_progress.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "palette.h"
 #include "ui_screen_shell.h"
@@ -108,62 +109,62 @@ lv_obj_t *uiJobProgressCreate()
     lv_obj_set_style_bg_color(scr, Palette::bgApp(), 0);
 
     ring = lv_arc_create(scr);
-    lv_obj_set_size(ring, 224, 224);
+    lv_obj_set_size(ring, px(224), px(224));
     lv_obj_center(ring);
     lv_arc_set_bg_angles(ring, 0, 360);
     lv_arc_set_rotation(ring, 270); // start at 12 o'clock
     lv_arc_set_range(ring, 0, 100);
     lv_arc_set_value(ring, 0);
     lv_obj_set_style_arc_color(ring, Palette::accent(), LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(ring, 12, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(ring, 12, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(ring, px(12), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(ring, px(12), LV_PART_MAIN);
     lv_obj_set_style_arc_color(ring, Palette::bgPanel(), LV_PART_MAIN);
     lv_obj_remove_style(ring, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(ring, LV_OBJ_FLAG_CLICKABLE);
 
     filenameLbl = lv_label_create(scr);
-    lv_obj_set_style_text_font(filenameLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(filenameLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(filenameLbl, Palette::textMuted(), 0);
-    lv_obj_set_width(filenameLbl, 160);
+    lv_obj_set_width(filenameLbl, px(160));
     // Scrolls, like the Jobs hub: names routinely differ only at the end
     // ("drawing 1" / "drawing 2"), which is exactly what "..." would hide.
     lv_label_set_long_mode(filenameLbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_align(filenameLbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(filenameLbl, LV_ALIGN_CENTER, 0, -56);
+    lv_obj_align(filenameLbl, LV_ALIGN_CENTER, 0, px(-56));
 
     // Sits ABOVE the percentage, not below it: below is where the pause and
     // stop buttons are (y +15..+73), and a line long enough to hold both the
     // clock and the estimate is wide enough to run into both of them.
     timingLbl = lv_label_create(scr);
-    lv_obj_set_style_text_font(timingLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(timingLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(timingLbl, Palette::textMuted(), 0);
-    lv_obj_align(timingLbl, LV_ALIGN_CENTER, 0, -40);
+    lv_obj_align(timingLbl, LV_ALIGN_CENTER, 0, px(-40));
 
     percentLbl = lv_label_create(scr);
-    lv_obj_set_style_text_font(percentLbl, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(percentLbl, &UI_FONT_32, 0);
     lv_obj_set_style_text_color(percentLbl, lv_color_white(), 0);
-    lv_obj_align(percentLbl, LV_ALIGN_CENTER, 0, -14);
+    lv_obj_align(percentLbl, LV_ALIGN_CENTER, 0, px(-14));
 
     lv_obj_t *pauseBtn = lv_btn_create(scr);
-    lv_obj_set_size(pauseBtn, 58, 58);
+    lv_obj_set_size(pauseBtn, px(58), px(58));
     lv_obj_set_style_radius(pauseBtn, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(pauseBtn, Palette::bgSecondary(), 0);
-    lv_obj_align(pauseBtn, LV_ALIGN_CENTER, -34, 44);
+    lv_obj_align(pauseBtn, LV_ALIGN_CENTER, px(-34), px(44));
     lv_obj_add_event_cb(pauseBtn, pauseBtnCb, LV_EVENT_CLICKED, NULL);
     pauseLbl = lv_label_create(pauseBtn);
     lv_label_set_text(pauseLbl, LUCIDE_PAUSE);
-    lv_obj_set_style_text_font(pauseLbl, &lucide_24, 0);
+    lv_obj_set_style_text_font(pauseLbl, &UI_ICONS_24, 0);
     lv_obj_center(pauseLbl);
 
     lv_obj_t *stopBtn = lv_btn_create(scr);
-    lv_obj_set_size(stopBtn, 58, 58);
+    lv_obj_set_size(stopBtn, px(58), px(58));
     lv_obj_set_style_radius(stopBtn, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(stopBtn, Palette::alert(), 0); // same feedHold+softReset as E-Stop, so same colour
-    lv_obj_align(stopBtn, LV_ALIGN_CENTER, 34, 44);
+    lv_obj_align(stopBtn, LV_ALIGN_CENTER, px(34), px(44));
     lv_obj_add_event_cb(stopBtn, stopBtnCb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *stopLbl = lv_label_create(stopBtn);
     lv_label_set_text(stopLbl, LUCIDE_SQUARE);
-    lv_obj_set_style_text_font(stopLbl, &lucide_24, 0);
+    lv_obj_set_style_text_font(stopLbl, &UI_ICONS_24, 0);
     lv_obj_set_style_text_color(stopLbl, Palette::accentFg(), 0);
     lv_obj_center(stopLbl);
 

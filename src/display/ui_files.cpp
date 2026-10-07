@@ -1,4 +1,5 @@
 #include "ui_files.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "../net/fluidnc_client.h"
 #include "radial_ring.h"
@@ -35,9 +36,9 @@ namespace
     //
     // 60 at radius 80 leaves the selected chip 2px clear of the 96px hub,
     // which is what caps the near size here.
-    const lv_coord_t RING_RADIUS = 80;
-    const lv_coord_t RING_SIZE_NEAR = 60;
-    const lv_coord_t RING_SIZE_FAR = 20;
+    const lv_coord_t RING_RADIUS = px(80);
+    const lv_coord_t RING_SIZE_NEAR = px(60);
+    const lv_coord_t RING_SIZE_FAR = px(20);
     const float RING_SPREAD = 0.55f;
 
     // The arc below: 30-degree pitch, +/-132 degrees. At most
@@ -179,7 +180,7 @@ namespace
         // One scrolling line, like the hub: a long name wrapped over
         // several lines would push the buttons off the round panel.
         lv_obj_t *text = lv_msgbox_get_text(mbox);
-        lv_obj_set_width(text, 170);
+        lv_obj_set_width(text, px(170));
         lv_label_set_long_mode(text, LV_LABEL_LONG_SCROLL_CIRCULAR);
         lv_obj_center(mbox);
         lv_obj_add_event_cb(mbox, confirmCb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -218,12 +219,12 @@ namespace
         lv_obj_set_style_bg_opa(chip, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(chip, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_border_width(chip, 0, 0);
-        lv_obj_set_style_shadow_width(chip, 12, 0);
+        lv_obj_set_style_shadow_width(chip, px(12), 0);
         lv_obj_set_style_shadow_color(chip, lv_color_black(), 0);
         lv_obj_set_style_shadow_opa(chip, LV_OPA_30, 0);
         lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_pad_all(chip, 0, 0);
-        lv_obj_set_ext_click_area(chip, 10);
+        lv_obj_set_ext_click_area(chip, px(10));
 
         lv_obj_t *icon = lv_label_create(chip);
         lv_label_set_text(icon, LUCIDE_FILE);
@@ -279,13 +280,13 @@ lv_obj_t *uiFilesCreate()
     // Centre hub: the one place a filename is readable, and the run button.
     // Slightly larger than the dial's hub because filenames need the width.
     lv_obj_t *hub = lv_obj_create(screenRoot);
-    lv_obj_set_size(hub, 96, 96);
+    lv_obj_set_size(hub, px(96), px(96));
     lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(hub, Palette::bgSecondary(), 0);
     lv_obj_set_style_bg_color(hub, Palette::accentHover(), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(hub, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(hub, Palette::border(), 0);
-    lv_obj_set_style_border_width(hub, 1, 0);
+    lv_obj_set_style_border_width(hub, px(1), 0);
     lv_obj_set_style_pad_all(hub, 0, 0);
     lv_obj_clear_flag(hub, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(hub, LV_OBJ_FLAG_CLICKABLE);
@@ -293,7 +294,7 @@ lv_obj_t *uiFilesCreate()
     lv_obj_align(hub, LV_ALIGN_CENTER, 0, 0);
 
     hubNameLbl = lv_label_create(hub);
-    lv_obj_set_width(hubNameLbl, 82);
+    lv_obj_set_width(hubNameLbl, px(82));
     // Scrolls, rather than ellipsising. 82px holds roughly a dozen characters
     // and plotter files are routinely named by layer -- "drawing 1", "drawing
     // 2", "drawing 3" -- so the digit that tells them apart is the character
@@ -306,19 +307,19 @@ lv_obj_t *uiFilesCreate()
     // animates when the text actually overflows, so short names sit still.
     lv_label_set_long_mode(hubNameLbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_align(hubNameLbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(hubNameLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(hubNameLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(hubNameLbl, Palette::text(), 0);
-    lv_obj_align(hubNameLbl, LV_ALIGN_CENTER, 0, -18);
+    lv_obj_align(hubNameLbl, LV_ALIGN_CENTER, 0, px(-18));
 
     hubMetaLbl = lv_label_create(hub);
-    lv_obj_set_style_text_font(hubMetaLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(hubMetaLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(hubMetaLbl, Palette::textMuted(), 0);
-    lv_obj_align(hubMetaLbl, LV_ALIGN_CENTER, 0, 4);
+    lv_obj_align(hubMetaLbl, LV_ALIGN_CENTER, 0, px(4));
 
     hubActionLbl = lv_label_create(hub);
-    lv_obj_set_style_text_font(hubActionLbl, &lucide_12, 0); // icon + word
+    lv_obj_set_style_text_font(hubActionLbl, &UI_ICONS_12, 0); // icon + word
     lv_obj_set_style_text_color(hubActionLbl, Palette::accent(), 0);
-    lv_obj_align(hubActionLbl, LV_ALIGN_CENTER, 0, 24);
+    lv_obj_align(hubActionLbl, LV_ALIGN_CENTER, 0, px(24));
 
     // Arc layout rather than a full circle: 30-degree pitch, and nothing
     // drawn past +/-132 degrees. That empties the 5/6/7 o'clock arc so the

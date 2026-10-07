@@ -22,8 +22,11 @@
 // label for 150ms.
 // The release asset the panel flashes. Fixed rather than version-stamped
 // so the updater never has to guess a filename from a tag -- the release
-// workflow publishes it under exactly this name.
-#define OTA_ASSET_NAME "terradial-ota.bin"
+// workflow publishes it under exactly this name. One per board (pins.h),
+// so a dial can only ever pick up firmware built for its own hardware; a
+// release without this board's asset simply reads as "no update".
+#include "pins.h"
+#define OTA_ASSET_NAME BOARD_OTA_ASSET_NAME
 
 namespace OtaUpdater
 {

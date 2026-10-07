@@ -1,4 +1,5 @@
 #include "radial_ring.h"
+#include "ui_scale.h"
 #include <math.h>
 
 namespace

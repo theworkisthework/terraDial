@@ -6,7 +6,23 @@
 
 PanelRing panelRing;
 
+#if BOARD_HAS_LED_RING || BOARD_HAS_SCREEN_RING
+
+#if BOARD_HAS_LED_RING
 static Adafruit_NeoPixel strip(LED_RING_COUNT, PIN_LED_RING, NEO_GRB + NEO_KHZ800);
+#else
+// No LEDs on this board: the same animations, drawn round the edge of the
+// display instead (see screen_ring.h). Same interface, same code below.
+#include "screen_ring.h"
+static ScreenRing strip(LED_RING_COUNT);
+#endif
+
+// A ring of many "LEDs" (the on-screen one) gets a few touches a 5-LED
+// ring can't use: a faster chase step, so a lap takes about as long as on
+// 5, and a short comet tail behind the chasing light. Compile-time, so the
+// 5-LED build is exactly what it was.
+static const bool DENSE_RING = LED_RING_COUNT >= 12;
+static const uint32_t CHASE_STEP_MS = DENSE_RING ? 50 : 120;
 static uint8_t sineTab[256];
 
 // Same durations terraPixel uses for its "just finished a job" celebration.
@@ -96,7 +112,7 @@ void PanelRing::render()
             // a single bright pixel chases around the 5 LEDs to read as "active".
             strip.setBrightness(userBright);
             fillAll(0, 0, 0);
-            int step = (int)((t / 120) % LED_RING_COUNT);
+            int step = (int)((t / CHASE_STEP_MS) % LED_RING_COUNT);
             // Confirmed on hardware: this strip's pixel order runs
             // COUNTER-clockwise around the panel, so ascending index walks
             // the ring backwards relative to the knob. Hence clockwise
@@ -105,6 +121,16 @@ void PanelRing::render()
             // opposite the direction the dial was turned.
             int idx = chaseDir_ >= 0 ? (LED_RING_COUNT - 1 - step) : step;
             strip.setPixelColor(idx, 255, 250, 240);
+            if (DENSE_RING)
+            {
+                // The tail trails behind the direction of travel: clockwise
+                // is descending index (see above), so behind is ascending.
+                int behind = chaseDir_ >= 0 ? 1 : LED_RING_COUNT - 1;
+                int t1 = (idx + behind) % LED_RING_COUNT;
+                int t2 = (t1 + behind) % LED_RING_COUNT;
+                strip.setPixelColor(t1, 102, 100, 96);
+                strip.setPixelColor(t2, 38, 37, 36);
+            }
             break;
         }
 
@@ -149,7 +175,7 @@ void PanelRing::render()
             strip.setBrightness(userBright);
             for (int i = 0; i < LED_RING_COUNT; i++)
             {
-                uint8_t v = sin8t((i * 51) + (t / 24)); // 51 ~= 256/5, spread evenly
+                uint8_t v = sin8t((i * (256 / LED_RING_COUNT)) + (t / 24)); // one wave spread evenly round the ring (51 apart on 5 LEDs)
                 strip.setPixelColor(i, 40 + (v >> 2), 22 + (v >> 3), 4);
             }
             break;
@@ -164,3 +190,18 @@ void PanelRing::update()
     render();
     strip.show();
 }
+
+#else
+
+// No ring of either kind on this board (pins.h). The object still exists so callers don't
+// need #ifs, and still remembers its mode and brightness -- the Lights
+// screen reads brightness() back -- it just never lights anything.
+void PanelRing::begin() {}
+
+void PanelRing::setMode(MachineMode mode) { mode_ = mode; }
+
+void PanelRing::setBrightness(uint8_t percent) { brightnessPct_ = percent > 100 ? 100 : percent; }
+
+void PanelRing::update() {}
+
+#endif

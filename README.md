@@ -81,8 +81,9 @@ Not in any menu: these open by themselves when they're needed.
 | Input | EC11-style rotary encoder with push switch |
 | LEDs | 5× WS2812 ring around the bezel |
 
-Pin assignments are in [`include/pins.h`](include/pins.h), confirmed against
-Elecrow's factory example for this exact board rather than guessed.
+Pin assignments are in [`include/boards/crowpanel_1_28.h`](include/boards/crowpanel_1_28.h),
+confirmed against Elecrow's factory example for this exact board rather than
+guessed. The Waveshare Knob is supported too; see [Boards](#boards).
 
 ### Power
 
@@ -214,12 +215,41 @@ panel that has already updated.
 Built with [PlatformIO](https://platformio.org/).
 
 ```bash
-# 1. Build and flash
+# 1. Build and flash (CrowPanel, the default)
 pio run -t upload
+
+#    ...or for the Waveshare Knob
+pio run -e waveshare-knob-1_8 -t upload
 
 # 2. Watch the logs
 pio device monitor
 ```
+
+### Boards
+
+One firmware, one PlatformIO env per board. Each env sets a `BOARD_*`
+define, and [`include/pins.h`](include/pins.h) pulls in that board's header
+from [`include/boards/`](include/boards/): its pin map, plus flags for what
+it has (knob button, LED ring, haptics, battery) that the rest of the code
+branches on. Adding a board means adding a header and an env. The screens
+don't change.
+
+| Env | Board | Notes |
+|---|---|---|
+| `crowpanel-1_28-rotary` | Elecrow CrowPanel 1.28" Rotary | The original. 240×240. |
+| `waveshare-knob-1_8` | Waveshare ESP32-S3-Knob-Touch-LCD-1.8 | 360×360, drawn natively (see below). The knob doesn't click, so tap where you'd have clicked; every screen has touch controls and a back button. No LED ring. Adds haptic detents and a battery gauge on the home hub. |
+
+Every screen is designed on a 240px grid and drawn at the panel's own
+resolution: pixel values go through `px()` and fonts through `UI_FONT_<n>` /
+`UI_ICONS_<n>` (see [`include/ui_scale.h`](include/ui_scale.h)), so a 360px
+panel gets 1.5× geometry and the next Montserrat/Lucide size up. A new screen
+should never use a bare pixel number or a font by name. On the 240px panel
+`px()` is exactly the identity, so the CrowPanel build is unaffected.
+
+Each board updates itself from its own release asset (`terradial-ota.bin`
+for the CrowPanel, `terradial-knob18-ota.bin` for the Knob), so an update
+can't cross boards. The release workflow only builds the CrowPanel so far,
+so the Knob always reports "no update" until that changes.
 
 By default no credentials are compiled in: the panel boots unconfigured and
 you pick a network on-device (Settings > Wi-Fi > scan). To bake in default

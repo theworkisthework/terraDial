@@ -1,4 +1,5 @@
 #include "ui_nav.h"
+#include "ui_scale.h"
 #include <lvgl.h>
 #include "ui_dial.h"
 #include "ui_jog.h"

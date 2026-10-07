@@ -2,7 +2,8 @@
 #include <lvgl.h>
 
 // The terraPen logo (theworkisthework/terrapen-identity, TP-Logo-Animated.svg)
-// rasterised to a 128x128 LV_IMG_CF_ALPHA_8BIT bitmap.
+// rasterised to an LV_IMG_CF_ALPHA_8BIT bitmap: 128x128 on the 240px panel, 192x192 on the 360px panel, matching
+// the panel this build is for (PANEL_RES in pins.h).
 //
 // Alpha-only, so it has no colour of its own -- LVGL paints it with the
 // object's `img_recolor`. That's how it reads correctly on this panel: the
