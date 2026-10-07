@@ -1,9 +1,10 @@
 # terraDial
 
-Standalone control panel for the **terraPen** pen plotter, running on an
-Elecrow CrowPanel 1.28" round display — a 240×240 touchscreen with a rotary
-knob. It talks to [FluidNC](http://wiki.fluidnc.com/) over a WebSocket, so
-the plotter can be driven from the bench without a laptop or phone.
+Standalone control panel for the **terraPen** pen plotter, running on a
+round touchscreen with a rotary knob: the Elecrow CrowPanel 1.28" (240×240) or
+the Waveshare ESP32-S3 Knob 1.8" (360×360). It talks to
+[FluidNC](http://wiki.fluidnc.com/) over a WebSocket, so the plotter can be
+driven from the bench without a laptop or phone.
 
 Parent project: [terraForge](https://github.com/theworkisthework/terraForge)
 (the desktop app this panel descends from — and the source of its colour
@@ -17,6 +18,14 @@ also drive).
 - **Run G-code** straight off the plotter's SD card, with live progress,
   elapsed time and an estimate of the time remaining — including for jobs
   started from terraForge or the web UI rather than the panel
+- **Live plot mirror** — while a job runs, the drawing appears on the dial
+  as the plotter draws it on paper, from the head positions FluidNC already
+  reports. The view zooms out as the plot grows; a tap brings up pause/stop
+- **Spirograph** — a gear rolling inside (or outside) a ring, with the nib
+  dragged to where you want it and up to six interleaved copies, drawn on
+  the dial with the gear turning. *Plot* lifts the pen, homes, and draws it
+  for real, 25mm in from home. First entry in Jobs, or on About if you'd
+  rather Jobs held only jobs
 - **Pen up/down**, **homing** (with a clear-the-bed confirmation), **E-Stop**
   and **alarm clear**, the last showing FluidNC's own reason for the alarm
 - **Park for photo** — one dial item that lifts the pen, homes, then runs the
@@ -27,9 +36,15 @@ also drive).
 - **On-device Wi-Fi setup**: scan for networks, pick one, type the password
 - **Machine status** shown on the panel's 5-LED ring, readable across the room
   — a jog chases a pixel the way you turned the knob, a plot breathes the
-  whole ring slowly, and both dim with the screen when the panel sleeps
+  whole ring slowly, and both dim with the screen when the panel sleeps. On
+  the Waveshare Knob, which has no LEDs, the same ring is drawn round the edge
+  of the screen
 - **Sleep mode** so the panel isn't glowing at you through a multi-hour plot,
-  with the terraPen mark shown while idle beforehand
+  with the terraPen mark drawing itself while idle beforehand — the pen tracing
+  the logo's single stroke, as the identity's own animation does (and at boot)
+- **Demo mode** — a simulated plotter and lights, so every screen can be shown
+  working with no machine around, and a self-running tour of them
+- On the **Waveshare Knob**: a haptic tick per knob detent and a battery gauge
 - **About screen** carrying the project identity and QR links to the site,
   source and Discord — a 240px dial is no place to read a URL
 
@@ -49,8 +64,18 @@ The home dial and the screens it opens, in dial order.
 | | | |
 |:--:|:--:|:--:|
 | <img src="docs/screens/home-dial.svg?v=2" width="180"><br>**Home** — 8 destinations, E‑Stop always red | <img src="docs/screens/home-confirm.svg?v=2" width="180"><br>**Home XY** — clear‑the‑bed gate | <img src="docs/screens/jog.svg?v=2" width="180"><br>**Jog** — axis, position, per‑axis zero |
-| <img src="docs/screens/pen.svg?v=2" width="180"><br>**Pen** — up / down | <img src="docs/screens/jobs.svg?v=2" width="180"><br>**Jobs** — SD files on an open arc | <img src="docs/screens/estop.svg?v=2" width="180"><br>**E‑Stop** — feed hold + soft reset |
-| <img src="docs/screens/lights.svg?v=2" width="180"><br>**Lights** — terraPixel rail control | | |
+| <img src="docs/screens/pen.svg?v=2" width="180"><br>**Pen** — up / down | <img src="docs/screens/jobs.svg?v=3" width="180"><br>**Jobs** — SD files on an open arc | <img src="docs/screens/estop.svg?v=2" width="180"><br>**E‑Stop** — feed hold + soft reset |
+| <img src="docs/screens/lights.svg?v=2" width="180"><br>**Lights** — terraPixel rail control | <img src="docs/screens/home-dial-knob.svg?v=1" width="180"><br>**Home on the Waveshare Knob** — status ring on screen, battery in the hub | |
+
+### Spirograph
+
+First in the Jobs list (or on About). Tap Ring, Gear, Pen or copies and turn
+the knob; drag on the drawing to put the nib where you want it.
+
+| | | |
+|:--:|:--:|:--:|
+| <img src="docs/screens/jobs-spirograph.svg?v=1" width="180"><br>**In Jobs** — the first entry at the SD root | <img src="docs/screens/spirograph.svg?v=1" width="180"><br>**Spirograph** — the gear rolls round the ring as it draws; ×3 interleaved copies | <img src="docs/screens/spirograph-outside.svg?v=1" width="180"><br>**Rolling outside** — a second family of shapes |
+| <img src="docs/screens/spirograph-plot.svg?v=1" width="180"><br>**Plot** — lift, home, draw 25mm in from home | | |
 
 ### Settings
 
@@ -68,8 +93,8 @@ Not in any menu: these open by themselves when they're needed.
 
 | | | |
 |:--:|:--:|:--:|
-| <img src="docs/screens/radial-keyboard.svg?v=2" width="180"><br>**Radial keyboard** — opens when you tap a text field | <img src="docs/screens/idle-brand.svg?v=2" width="180"><br>**Idle** — the mark, before sleep | <img src="docs/screens/job-progress.svg?v=2" width="180"><br>**Job progress** — opens when a job starts |
-| <img src="docs/screens/alarm-clear.svg?v=2" width="180"><br>**Alarm clear** — appears on alarm | | |
+| <img src="docs/screens/radial-keyboard.svg?v=2" width="180"><br>**Radial keyboard** — opens when you tap a text field | <img src="docs/screens/idle-brand-drawing.svg?v=1" width="180"><br>**Idle** — the mark drawing itself, before sleep | <img src="docs/screens/idle-brand.svg?v=2" width="180"><br>**Idle** — drawn, with name and site |
+| <img src="docs/screens/job-progress-mirror.svg?v=1" width="180"><br>**Job progress** — the plot mirrored as it's drawn | <img src="docs/screens/job-progress.svg?v=2" width="180"><br>**Job progress: controls** — a tap, or a pause, brings them up | <img src="docs/screens/alarm-clear.svg?v=2" width="180"><br>**Alarm clear** — appears on alarm |
 
 ## Hardware
 
@@ -83,7 +108,24 @@ Not in any menu: these open by themselves when they're needed.
 
 Pin assignments are in [`include/boards/crowpanel_1_28.h`](include/boards/crowpanel_1_28.h),
 confirmed against Elecrow's factory example for this exact board rather than
-guessed. The Waveshare Knob is supported too; see [Boards](#boards).
+guessed.
+
+The **Waveshare ESP32-S3-Knob-Touch-LCD-1.8** is supported too (see
+[Boards](#boards)); its pins are in
+[`include/boards/waveshare_knob_1_8.h`](include/boards/waveshare_knob_1_8.h),
+taken from Waveshare's schematic and demos.
+
+| | |
+|---|---|
+| Board | Waveshare ESP32-S3 Knob 1.8" (ESP32-S3R8, 16MB flash, 8MB PSRAM; its second chip, an ESP32, is unused) |
+| Display | ST77916 360×360 round IPS, QSPI |
+| Touch | CST816 capacitive, I²C |
+| Input | Knob, pulse-per-direction, no push switch — touch does what a click would |
+| Extras | DRV2605 haptics, PDM microphone, LiPo with battery sense |
+
+Its USB-C port reaches one chip or the other depending on which way round
+the plug goes in: if a flash finds an ESP32 rather than an ESP32-S3, flip
+the plug.
 
 ### Power
 
@@ -237,7 +279,7 @@ don't change.
 | Env | Board | Notes |
 |---|---|---|
 | `crowpanel-1_28-rotary` | Elecrow CrowPanel 1.28" Rotary | The original. 240×240. |
-| `waveshare-knob-1_8` | Waveshare ESP32-S3-Knob-Touch-LCD-1.8 | 360×360, drawn natively (see below). The knob doesn't click, so tap where you'd have clicked; every screen has touch controls and a back button. No LED ring. Adds haptic detents and a battery gauge on the home hub. |
+| `waveshare-knob-1_8` | Waveshare ESP32-S3-Knob-Touch-LCD-1.8 | 360×360, drawn natively (see below). The knob doesn't click, so tap where you'd have clicked; every screen has touch controls and a back button. No LEDs, so the status ring is drawn round the screen's edge. Adds haptic detents and a battery gauge on the home hub. |
 
 Every screen is designed on a 240px grid and drawn at the panel's own
 resolution: pixel values go through `px()` and fonts through `UI_FONT_<n>` /
@@ -312,14 +354,18 @@ answers "STOPPED" or "NOT SENT", the second meaning go and stop it by hand.
 ```
 .github/         release build, and the installer-page deploy that follows it
 docs/screens/    README illustrations (generated)
-include/         pins, palette, LVGL config, shared enums
+include/         pins, palette, LVGL config, UI scaling, shared enums
+  boards/        one header per supported board: pin map + what it has
 lib/CST816D/     vendor touch driver
 src/
   config/        NVS-backed settings
-  display/       all UI screens and shared widgets
-  input/         encoder driver
-  led/           WS2812 status ring
-  net/           FluidNC WebSocket client, terraPixel HTTP client, Wi-Fi
+  display/       all UI screens and shared widgets, the plot mirror, the
+                 spirograph, the self-drawing logo
+  input/         encoder, haptics, microphone
+  led/           status ring: WS2812 LEDs, or drawn on screen
+  net/           FluidNC WebSocket client, terraPixel HTTP client, Wi-Fi,
+                 OTA, and the demo-mode machine simulator
+  power/         battery gauge
 tools/           icon, logo and screen-illustration generation
 web/             the browser-based firmware installer (published to Pages)
 design_handoff_radial_dial_ui/   the original design brief (historical)
@@ -335,6 +381,7 @@ Some notes worth knowing before changing things:
 - **It's a round screen.** Anything more than ~120px from centre (120,120) is
   behind the bezel and physically unreachable, corners included. Several bugs
   have come from laying out against the 240×240 square instead of the circle.
+  (Those are 240-grid numbers: on the 360px Knob, `px()` scales them.)
 - **Avoid `transform_zoom` / `lv_img_set_zoom` on anything whose parent has
   opacity < 255.** That combination pushes LVGL down an offscreen-layer path
   that is unreliable on this board — it has twice caused elements to render

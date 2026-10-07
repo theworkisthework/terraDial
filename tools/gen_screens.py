@@ -137,6 +137,10 @@ LUCIDE = {
     "arrow-up-down": '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
     "triangle-alert": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
                       '<path d="M12 9v4"/><path d="M12 17h.01"/>',
+    "printer": '<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>'
+               '<path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
+    "drafting-compass": '<path d="m12.99 6.74 1.93 3.44"/><path d="M19.136 12a10 10 0 0 1-14.271 0"/>'
+                        '<path d="m21 21-2.16-3.84"/><path d="m3 21 8.02-14.26"/><circle cx="12" cy="5" r="2"/>',
 }
 
 
@@ -248,8 +252,10 @@ def screen_home():
 def screen_jobs():
     p = []
     head(p)
-    # A folder or two ahead of the files, as an SD root usually lists them.
-    arc_ring(p, ["folder", "folder", "file", "file", "file", "file", "file"], 2, 30.0, 132.0)
+    # The spirograph first (ui_files.cpp spiroSlots), then a folder or two
+    # ahead of the files, as an SD root usually lists them.
+    arc_ring(p, ["drafting-compass", "folder", "folder", "file", "file", "file", "file", "file"],
+             3, 30.0, 132.0)
     hub(p, 96, [("flow_red.gcode", -18, 11, TEXT, "600"),
                 ("8.2 MB", 4, 12, TEXT_MUTED, "400")])
     icon(p, 104, 144, "play", 12, ACCENT)
@@ -679,6 +685,243 @@ def screen_keyboard():
     return "radial-keyboard", p
 
 
+# ---------------------------------------------------- newer screens
+
+def polyline(parts, pts, col, width=1.0, opacity=None):
+    op = ' opacity="%g"' % opacity if opacity is not None else ""
+    parts.append('<polyline points="%s" fill="none" stroke="%s" stroke-width="%g" '
+                 'stroke-linecap="round" stroke-linejoin="round"%s/>'
+                 % (" ".join("%.2f,%.2f" % q for q in pts), col, width, op))
+
+
+def pill(parts, cx, cy, w, label, fill, col, icon_name=None):
+    rect(parts, cx - w / 2.0, cy - 11, w, 22, 11, fill)
+    if icon_name:
+        icon(parts, cx - 13, cy, icon_name, 12, col)
+        text(parts, cx + 7, cy, label, 12, col, "600")
+    else:
+        text(parts, cx, cy, label, 12, col, "600")
+
+
+def spiro_curve(ring, gear, pen_pct, copies=1, outside=False):
+    """ui_spiro.cpp's buildCurve()/rawPoint(), in teeth: one point list per
+    copy, plus what the preview's rim stands for."""
+    if not outside and gear >= ring:
+        gear = ring - 1
+    d = pen_pct * gear / 100.0
+    c = ring + gear if outside else ring - gear
+    k = c / float(gear)
+    g = math.gcd(ring, gear)
+    turns, petals = gear // g, ring // g
+    per = max(12, min(240, 3000 // (copies * turns)))
+    n = turns * per
+    phase = math.pi if outside else 0.0
+    out = []
+    for j in range(copies):
+        rot = j * (2 * math.pi / petals) / copies
+        pts = []
+        for i in range(n + 1):
+            t = 2 * math.pi * turns * i / n
+            arm = phase + k * t if outside else phase - k * t
+            x = c * math.cos(t) + d * math.cos(arm)
+            y = c * math.sin(t) + d * math.sin(arm)
+            pts.append((x * math.cos(rot) - y * math.sin(rot), x * math.sin(rot) + y * math.cos(rot)))
+        out.append(pts)
+    frame = (c + max(gear, d)) if outside else max(ring, c + d)
+    return out, frame, c, d, gear
+
+
+def screen_spiro(name, ring, gear, pen, copies, outside, selected, plotting=None):
+    """ui_spiro.cpp: the paper is a 128px canvas at y-20, rim 3px inside it;
+    the ring round its rim, the gear parked at the start with its arm out
+    to the nib; In/Out and Plot along the top, the four chips below."""
+    p = []
+    head(p)
+    cx, cy, rim = 120.0, 100.0, 61.0
+    copies_pts, frame, c, d, g = spiro_curve(ring, gear, pen, copies, outside)
+    s = rim / frame
+
+    def to(pt):
+        return (cx + pt[0] * s, cy - pt[1] * s)
+
+    circle(p, cx, cy, ring * s, "none", BORDER, 1, opacity=0.6)
+    for pts in copies_pts:
+        polyline(p, [to(q) for q in pts], TEXT, 1.0)
+    gc = (cx + c * s, cy)
+    nib = to(copies_pts[0][0])
+    circle(p, gc[0], gc[1], g * s, "none", ACCENT_SECONDARY, 1, opacity=0.7)
+    polyline(p, [gc, nib], ACCENT_SECONDARY, 1.0, opacity=0.7)
+    circle(p, nib[0], nib[1], 3, ACCENT)
+
+    pill(p, 88, 31, 56, "Out" if outside else "In", BG_SECONDARY, TEXT)
+    pill(p, 152, 31, 56, "Plot", ACCENT, ACCENT_FG, "printer")
+    if plotting:
+        text(p, 120, 172, plotting, 12, TEXT)
+        rect(p, 60, 183, 120, 6, 3, BG_PANEL)
+        rect(p, 60, 183, 120 * 0.34, 6, 3, ACCENT)
+    else:
+        labels = ["R%d" % ring, "G%d" % min(gear, ring - 1 if not outside else gear),
+                  "P%d" % pen, "x%d" % copies]
+        for i, lab in enumerate(labels):
+            sel = i == selected
+            pill(p, 48 + 48 * i, 180, 44, lab, ACCENT if sel else BG_SECONDARY,
+                 ACCENT_FG if sel else TEXT_MUTED)
+    back_button(p)
+    tail(p)
+    return name, p
+
+
+def screen_spiro_lace():
+    return screen_spiro("spirograph", 96, 60, 120, 3, False, 3)
+
+
+def screen_spiro_outside():
+    return screen_spiro("spirograph-outside", 60, 24, 90, 1, True, 1)
+
+
+def screen_spiro_plot():
+    """The Plot confirm, over the paper (ui_spiro.cpp buildConfirm)."""
+    name, p = screen_spiro("spirograph-plot", 96, 60, 120, 3, False, 3)
+    p.pop()  # reopen past tail()
+    circle(p, 120, 120, 116, BG_APP, opacity=0.9)
+    text(p, 120, 58, "Plot this?", 16, TEXT, "600")
+    for i, mm in enumerate((60, 100, 150)):
+        sel = i == 1
+        pill(p, 64 + 56 * i, 90, 50, "%d mm" % mm, ACCENT if sel else BG_SECONDARY, TEXT)
+    text(p, 120, 122, "Lifts the pen and homes,", 12, TEXT_MUTED)
+    text(p, 120, 137, "then draws 25mm in from home.", 12, TEXT_MUTED)
+    rect(p, 40, 154, 76, 32, 16, BG_SECONDARY)
+    text(p, 78, 170, "Cancel", 12, TEXT, "600")
+    rect(p, 124, 154, 76, 32, 16, ACCENT)
+    icon(p, 146, 170, "printer", 12, ACCENT_FG)
+    text(p, 170, 170, "Plot", 12, ACCENT_FG, "600")
+    tail(p)
+    return name, p
+
+
+def screen_jobs_spiro():
+    p = []
+    head(p)
+    arc_ring(p, ["drafting-compass", "folder", "folder", "file", "file", "file", "file", "file"],
+             0, 30.0, 132.0)
+    hub(p, 96, [("Spirograph", -18, 12, TEXT, "600"),
+                ("Make a drawing", 4, 12, TEXT_MUTED, "400")])
+    icon(p, 102, 144, "drafting-compass", 12, ACCENT)
+    text(p, 126, 144, "Open", 12, ACCENT, "600")
+    back_button(p)
+    tail(p)
+    return "jobs-spirograph", p
+
+
+def demo_arcs(upto):
+    """The demo job's drawing (machine_sim.cpp): nine wavy arcs fanning out
+    from the bottom-right of the bed, alternate ones drawn backwards.
+    `upto` is how many arcs are done; the fraction past it is the one in
+    progress. Returns the pen-down runs, in mm."""
+    cxm, cym = 300 * 0.9, 420 * 0.1
+    runs = []
+    k = 0
+    while k < 9 and k < upto:
+        frac = min(1.0, upto - k)
+        pts = []
+        steps = int(40 * frac) + 1
+        for i in range(steps + 1):
+            u = frac * i / steps
+            if k % 2:
+                u = 1 - u
+            th = math.pi * (0.5 + 0.5 * u)
+            r = 30 + 24 * k + 5 * math.sin(4 * 4 * th + k * 0.9)
+            pts.append((cxm + r * math.cos(th), cym + r * math.sin(th)))
+        runs.append(pts)
+        k += 1
+    return runs
+
+
+def screen_job_mirror():
+    """Job Progress with a drawing (ui_job_progress.cpp + plot_mirror.cpp):
+    the plot so far inside the ring, fitted the way PlotMirror::fitView
+    fits it, the pen dot at the tip, and the percentage pill."""
+    p = []
+    head(p)
+    pct = 0.68
+    circle(p, 120, 120, 106, "none", BG_PANEL, 12)
+    a0, a1 = -90, -90 + 360 * pct
+    x0, y0 = 120 + 106 * math.cos(math.radians(a0)), 120 + 106 * math.sin(math.radians(a0))
+    x1, y1 = 120 + 106 * math.cos(math.radians(a1)), 120 + 106 * math.sin(math.radians(a1))
+    p.append('<path d="M%g %g A106 106 0 1 1 %g %g" stroke="%s" stroke-width="12" fill="none"/>'
+             % (x0, y0, x1, y1, ACCENT))
+
+    runs = demo_arcs(6.6)
+    xs = [q[0] for r in runs for q in r]
+    ys = [q[1] for r in runs for q in r]
+    w, h = max(xs) - min(xs), max(ys) - min(ys)
+    span = max(30.0, math.hypot(w, h) * 1.3)
+    s = (200 - 12) / span
+    mx, my = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
+    for r in runs:
+        polyline(p, [(120 + (x - mx) * s, 120 - (y - my) * s) for x, y in r], TEXT, 1.0)
+    tx, ty = runs[-1][-1]
+    circle(p, 120 + (tx - mx) * s, 120 - (ty - my) * s, 3.5, ACCENT)
+
+    rect(p, 100, 173, 40, 18, 9, BG_SECONDARY, opacity=0.8)
+    text(p, 120, 182, "%d%%" % round(pct * 100), 12, TEXT, "600")
+    back_button(p)
+    tail(p)
+    return "job-progress-mirror", p
+
+
+def screen_brand_drawing():
+    """The idle screen part-way through LogoDraw: the mark revealed along
+    its stroke to here, the pen dot leading; name and site not in yet."""
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from gen_logo import parse_path
+    poly = parse_path(LOGO_D)[0]
+    seg = [math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(poly, poly[1:])]
+    target = sum(seg) * 0.58
+    done, run = [poly[0]], 0.0
+    for (a, b), L in zip(zip(poly, poly[1:]), seg):
+        if run + L >= target:
+            f = (target - run) / L if L else 0
+            done.append((a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f))
+            break
+        done.append(b)
+        run += L
+
+    p = []
+    head(p)
+    box, cx, cy = 128.0, 120.0, 102.0
+    k = box / LOGO_VIEWBOX
+    pts = [(cx - box / 2 + x * k, cy - box / 2 + y * k) for x, y in done]
+    polyline(p, pts, TEXT, max(1.5, 3.0 * k))
+    circle(p, pts[-1][0], pts[-1][1], 2.5, ACCENT)
+    tail(p)
+    return "idle-brand-drawing", p
+
+
+def screen_home_knob():
+    """The home dial on the Waveshare Knob: the status ring drawn round the
+    edge (screen_ring.h -- 24 dots, idle's amber shimmer) and the battery
+    at the foot of the hub (ui_dial.cpp)."""
+    name, p = screen_home()
+    p.pop()
+    for i in range(24):
+        v = 127.5 + 127.4 * math.sin((i * (256 // 24)) * 2 * math.pi / 256)
+        r, g, b = 40 + v / 4, 22 + v / 8, 4.0
+        a = -2 * math.pi * i / 24
+        x, y = 120 + 115 * math.sin(a), 120 - 115 * math.cos(a)
+        col = "#%02x%02x%02x" % (255, int(g * 255 / r), int(b * 255 / r))
+        circle(p, x, y, 2.5, col, opacity=round(r / 255 * 0.6, 3))
+    # Battery glyph + level, like LV_SYMBOL_BATTERY_3 " 78%".
+    bx, by = 103, 151
+    rect(p, bx, by - 3.5, 13, 7, 1.5, "none", stroke=TEXT_MUTED)
+    rect(p, bx + 13, by - 1.5, 1.5, 3, 0.5, TEXT_MUTED)
+    rect(p, bx + 1.5, by - 2, 7.5, 4, 0.5, TEXT_MUTED)
+    text(p, 133, by, "78%", 12, TEXT_MUTED)
+    tail(p)
+    return "home-dial-knob", p
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out = os.path.join(root, "docs", "screens")
@@ -689,10 +932,12 @@ def main():
                screen_settings_machine_terrapixel, screen_settings_display,
                screen_settings_display_sleep,
                screen_job_progress, screen_estop, screen_alarm, screen_keyboard,
-               screen_about, screen_brand):
+               screen_about, screen_brand,
+               screen_spiro_lace, screen_spiro_outside, screen_spiro_plot, screen_jobs_spiro,
+               screen_job_mirror, screen_brand_drawing, screen_home_knob):
         name, parts = fn()
         path = os.path.join(out, name + ".svg")
-        open(path, "w").write("\n".join(parts))
+        open(path, "w", encoding="utf-8", newline="\n").write("\n".join(parts))
         print("wrote docs/screens/%s.svg" % name)
 
 
