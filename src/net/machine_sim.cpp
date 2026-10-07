@@ -19,7 +19,7 @@ namespace
     const SimFile SIM_FILES[] = {
         {"", "Portraits", -1},
         {"", "Test patterns", -1},
-        {"", "snowflake.gcode", 91109},
+        {"", "refraction.gcode", 91109}, // what the demo job draws: a fan of wavy arcs
         {"", "spirograph_rose.gcode", 248331},
         {"", "botanical study - fern fronds, layer 2 of 3 (0.3mm fineliner).gcode", 532175},
         {"", "calibration_square.nc", 2048},

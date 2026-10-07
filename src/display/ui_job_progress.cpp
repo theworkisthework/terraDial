@@ -53,7 +53,12 @@ namespace
 
     void applyView(MachineMode mode)
     {
-        if (controlsUp && mode != MachineMode::Hold && millis() - controlsUpAt > CONTROLS_HIDE_MS)
+        // A pause brings the controls up by itself: otherwise a held job
+        // just looks like a drawing that has stopped for no reason, and
+        // resume is the next thing you'll want. They stay while it's held
+        // and go again the usual while after it resumes.
+        if (mode == MachineMode::Hold) showControls(true);
+        else if (controlsUp && millis() - controlsUpAt > CONTROLS_HIDE_MS)
             controlsUp = false;
 
         bool drawingView = PlotMirror::hasDrawing() && !controlsUp;

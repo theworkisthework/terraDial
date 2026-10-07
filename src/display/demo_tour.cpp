@@ -109,7 +109,7 @@ namespace
         {Op::Click, 0, 2500, nullptr},     // open it
         {Op::MenuTurn, 1, 1500, nullptr},
         {Op::LongPress, 0, 2000, nullptr}, // up to the SD root
-        {Op::JobsTurn, 2, 1500, nullptr},  // snowflake.gcode
+        {Op::JobsTurn, 2, 1500, nullptr},  // refraction.gcode
         {Op::Click, 0, 8000, nullptr},     // run -- Job Progress opens itself
         {Op::Click, 0, 3000, nullptr},     // pause
         {Op::Click, 0, 1000, nullptr},     // resume
