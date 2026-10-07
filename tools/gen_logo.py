@@ -133,27 +133,47 @@ def parse_path(d):
 
 
 def dist_to_segment(px, py, a, b):
+    """(distance from the point to segment ab, how far along ab 0..1)."""
     ax, ay = a
     bx, by = b
     dx, dy = bx - ax, by - ay
     L = dx * dx + dy * dy
     if L == 0:
-        return math.hypot(px - ax, py - ay)
+        return math.hypot(px - ax, py - ay), 0.0
     t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / L))
-    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy)), t
+
+
+# Arrival values: how far along the stroke the pen is when it first inks a
+# pixel, 0..ARRIVAL_MAX of the way; NEVER for a pixel it never touches.
+ARRIVAL_MAX = 254
+NEVER = 255
 
 
 def rasterise(polys, size):
+    """Returns (alpha rows, arrival rows).
+
+    Alpha is the stroke's coverage of each pixel. Arrival is how far along
+    the stroke the pen is when it first reaches that pixel -- the EARLIEST
+    pass where the stroke crosses itself -- which is what lets LogoDraw
+    reveal this exact bitmap along the pen's path rather than redrawing
+    the stroke as a line.
+    """
     scale = VIEWBOX / size                       # viewBox units per output px
     radius_px = max(MIN_STROKE_PX * size / BASE_SIZE, SVG_STROKE / scale) / 2.0
     radius = radius_px * scale                   # back into viewBox units
 
     # Bucket segments by row band so each pixel only tests nearby geometry --
     # brute force over ~1500 segments x 128^2 px x 9 samples is far too slow.
+    # Each segment carries the stroke length at its start and its own length.
     segs = []
+    run = 0.0
     for poly in polys:
         for i in range(len(poly) - 1):
-            segs.append((poly[i], poly[i + 1]))
+            seg_len = math.hypot(poly[i + 1][0] - poly[i][0], poly[i + 1][1] - poly[i][1])
+            segs.append((poly[i], poly[i + 1], run, seg_len))
+            run += seg_len
+    total = run or 1.0
     bands = {}
     band_h = VIEWBOX / size
     for s in segs:
@@ -162,22 +182,31 @@ def rasterise(polys, size):
         for b in range(lo, hi + 1):
             bands.setdefault(b, []).append(s)
 
-    rows = []
+    rows, arrivals = [], []
     for py in range(size):
-        row = []
+        row, arow = [], []
         for px in range(size):
             hits = 0
+            first = None
             for sy in range(SUPERSAMPLE):
                 for sx in range(SUPERSAMPLE):
                     wx = (px + (sx + 0.5) / SUPERSAMPLE) * scale
                     wy = (py + (sy + 0.5) / SUPERSAMPLE) * scale
+                    hit = False
                     for s in bands.get(int(wy / band_h), ()):
-                        if dist_to_segment(wx, wy, s[0], s[1]) <= radius:
-                            hits += 1
-                            break
+                        d, t = dist_to_segment(wx, wy, s[0], s[1])
+                        if d <= radius:
+                            hit = True
+                            at = s[2] + t * s[3]
+                            if first is None or at < first:
+                                first = at
+                    if hit:
+                        hits += 1
             row.append(int(round(255 * hits / (SUPERSAMPLE ** 2))))
+            arow.append(NEVER if first is None else int(round(ARRIVAL_MAX * first / total)))
         rows.append(row)
-    return rows
+        arrivals.append(arow)
+    return rows, arrivals
 
 
 # The stroke polyline is stored on the 240px design grid (ui_scale.h), in
@@ -243,7 +272,7 @@ def main():
 
     maps = []
     for panel, size in sorted(SIZES.items()):
-        rows = rasterise(polys, size)
+        rows, arrivals = rasterise(polys, size)
 
         if "--preview" in sys.argv:
             step = max(1, size // 64)
@@ -251,11 +280,14 @@ def main():
                 print("".join(" .:-=+*#%@"[min(9, rows[y][x] // 26)]
                               for x in range(0, size, step)))
 
-        flat = [v for row in rows for v in row]
-        body = ""
-        for i in range(0, len(flat), 12):
-            body += "    " + " ".join("0x%02x," % v for v in flat[i:i + 12]) + "\n"
-        maps.append((panel, size, body))
+        def c_bytes(grid):
+            flat = [v for row in grid for v in row]
+            out = ""
+            for i in range(0, len(flat), 12):
+                out += "    " + " ".join("0x%02x," % v for v in flat[i:i + 12]) + "\n"
+            return out
+
+        maps.append((panel, size, c_bytes(rows), c_bytes(arrivals)))
 
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     base = os.path.join(here, "src", "display", "icon_logo")
@@ -278,11 +310,24 @@ def main():
 //
 // Regenerate with: python tools/gen_logo.py
 extern const lv_img_dsc_t iconLogo;
-''' % ", ".join("%dx%d on the %dpx panel" % (size, size, panel) for panel, size, _ in maps))
+
+// One byte per iconLogo pixel: how far along the logo's single stroke the
+// pen is when it first inks that pixel, 0..%d (the earliest pass, where the
+// stroke crosses itself), or %d for a pixel it never touches. LogoDraw
+// reveals iconLogo by this to draw the mark in, pen-style, with the
+// finished frame identical to the static bitmap.
+static const uint8_t ICON_LOGO_ARRIVAL_MAX = %d;
+static const uint8_t ICON_LOGO_NEVER = %d;
+extern const uint8_t iconLogoArrival[];
+''' % (", ".join("%dx%d on the %dpx panel" % (size, size, panel) for panel, size, _, _ in maps),
+       ARRIVAL_MAX, NEVER, ARRIVAL_MAX, NEVER))
 
     parts = []
-    for n, (panel, size, body) in enumerate(maps):
+    for n, (panel, size, body, abody) in enumerate(maps):
         parts.append('''%s PANEL_RES == %d
+
+const uint8_t iconLogoArrival[] = {
+%s};
 
 static const uint8_t ICON_LOGO_MAP[] = {
 %s};
@@ -298,7 +343,7 @@ const lv_img_dsc_t iconLogo = {
     sizeof(ICON_LOGO_MAP),
     ICON_LOGO_MAP,
 };
-''' % ("#if" if n == 0 else "\n#elif", panel, body, size, size))
+''' % ("#if" if n == 0 else "\n#elif", panel, abody, body, size, size))
 
     open(base + ".cpp", "w", encoding="utf-8", newline="\n").write('''#include "icon_logo.h"
 #include "pins.h"
@@ -311,7 +356,7 @@ const lv_img_dsc_t iconLogo = {
 #endif
 ''' % "".join(parts))
     print("wrote src/display/icon_logo.{h,cpp}  (%s)"
-          % ", ".join("%dx%d" % (size, size) for _, size, _ in maps))
+          % ", ".join("%dx%d" % (size, size) for _, size, _, _ in maps))
 
 
 if __name__ == "__main__":

@@ -9,7 +9,8 @@ namespace
     lv_obj_t *overlay = nullptr;
     lv_timer_t *splashTimer = nullptr;
 
-    const uint32_t DRAW_MS = 3200;
+    // Unhurried: it's a pen drawing, not a loading bar.
+    const uint32_t DRAW_MS = 6400;
     const uint32_t TEXT_FADE_MS = 600;
     // How long the finished mark holds before a boot splash clears itself.
     const uint32_t SPLASH_HOLD_MS = 1800;
