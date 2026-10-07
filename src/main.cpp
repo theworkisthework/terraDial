@@ -14,6 +14,7 @@
 #include "display/ui_job_progress.h"
 #include "display/ui_park.h"
 #include "display/screen_sleep.h"
+#include "display/ui_brand.h"
 #include "display/demo_badge.h"
 #include "display/demo_tour.h"
 #include "input/encoder.h"
@@ -311,6 +312,10 @@ void setup()
     fluidNC.initTransport(); // command queue must exist before the UI can enqueue
     WifiManager::begin();
     startNetworkTask();
+
+    // The mark draws itself over the dial while Wi-Fi and FluidNC connect
+    // underneath, then clears away; a touch or a turn skips it.
+    UiBrand::showSplash();
 
     Serial.println("terraDial stage-2 bring-up ready");
 }
