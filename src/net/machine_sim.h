@@ -13,8 +13,9 @@
 //
 // Covers what the panel sends: jogs and jog-cancel, homing, $X, SD job
 // run/pause/resume/stop, file delete, work-zero (G10 L20) and plain G-code
-// moves (the Park macro). A job takes DEMO_JOB_MS and traces a pattern
-// across the bed so the position readouts move. The SD card is a fixed
+// moves (the Park macro). A job takes DEMO_JOB_MS and draws a fan of wavy
+// arcs, pen down along each and up between them, so the position readouts
+// move and the Job Progress mirror has a believable plot to draw. The SD card is a fixed
 // set of folders and files, served as the same JSON FluidNC's HTTP
 // listing returns.
 class MachineSim

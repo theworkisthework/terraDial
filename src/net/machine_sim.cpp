@@ -333,21 +333,64 @@ void MachineSim::tick(LineSink sink, void *ctx)
         }
         else
         {
-            // Trace a Lissajous figure across the bed, lifting the pen now
-            // and then, so the X/Y/Z readouts look like a drawing.
-            float t = (float)jobElapsedMs_ / DEMO_JOB_MS;
-            float a = t * 2.0f * (float)M_PI * 6.0f;
-            float pattern[3] = {
-                DEMO_X_MAX_MM * 0.5f + DEMO_X_MAX_MM * 0.35f * sinf(3.0f * a),
-                MACHINE_Y_MAX_MM * 0.5f + MACHINE_Y_MAX_MM * 0.35f * sinf(2.0f * a),
-                fmodf(t * 40.0f, 1.0f) < 0.9f ? 0.0f : 5.0f,
-            };
-            // Glide in from wherever the head was over the first moments,
-            // rather than jumping the readouts straight onto the pattern.
+            // Draw something that looks like a plot, because the Job
+            // Progress screen draws it back (plot_mirror.h): a fan of wavy
+            // arcs radiating from the bottom-right of the bed, one at a
+            // time. Arcs alternate direction, so the pen-up travel between
+            // them is a short hop outwards rather than a trip back across.
+            // (This was a Lissajous figure retraced six times with a pen
+            // lift every second -- fine for the readouts, but mirrored on
+            // screen it read as a broken drawing going round in circles.)
+            const int ARCS = 9;
+            const float DRAW_SHARE = 0.85f; // of each arc's slot; the rest is travel
+            const float CX = DEMO_X_MAX_MM * 0.9f, CY = MACHINE_Y_MAX_MM * 0.1f;
+            const float R0 = 30.0f, R_STEP = 24.0f;
+            // Ripples along each quarter-turn. Few enough that the ten
+            // position reports a second land ~10 to a ripple -- more, and
+            // the mirror would draw them as zig-zags.
+            const float WAVE_MM = 5.0f, WAVES = 4.0f;
+
+            // The first moments glide in from wherever the head was, pen up.
             const float LEAD_IN_MS = 1500.0f;
-            float blend = jobElapsedMs_ >= LEAD_IN_MS ? 1.0f : jobElapsedMs_ / LEAD_IN_MS;
-            for (int i = 0; i < 3; i++)
-                mpos_[i] = jobStartPos_[i] + (pattern[i] - jobStartPos_[i]) * blend;
+            float lead = jobElapsedMs_ >= LEAD_IN_MS ? 1.0f : jobElapsedMs_ / LEAD_IN_MS;
+            float t = jobElapsedMs_ < LEAD_IN_MS ? 0.0f
+                                                 : (jobElapsedMs_ - LEAD_IN_MS) / (DEMO_JOB_MS - LEAD_IN_MS);
+
+            float slot = t * ARCS;
+            int k = (int)slot;
+            if (k >= ARCS) k = ARCS - 1;
+            float f = slot - k; // 0..1 through this arc's slot
+
+            // Arc k at a fraction u along it (0..1, in its own direction).
+            auto arcPoint = [&](int arc, float u, float &x, float &y) {
+                if (arc % 2) u = 1.0f - u;
+                float th = (float)M_PI * (0.5f + 0.5f * u); // straight up round to straight left
+                float r = R0 + R_STEP * arc + WAVE_MM * sinf(WAVES * 4.0f * th + arc * 0.9f);
+                x = CX + r * cosf(th);
+                y = CY + r * sinf(th);
+            };
+
+            float pattern[3];
+            bool drawing = f < DRAW_SHARE;
+            if (drawing)
+            {
+                arcPoint(k, f / DRAW_SHARE, pattern[0], pattern[1]);
+            }
+            else
+            {
+                // Travel: from the end of this arc to the start of the next.
+                float ax, ay, bx, by;
+                arcPoint(k, 1.0f, ax, ay);
+                arcPoint(k + 1 < ARCS ? k + 1 : k, 0.0f, bx, by);
+                float g = (f - DRAW_SHARE) / (1.0f - DRAW_SHARE);
+                pattern[0] = ax + (bx - ax) * g;
+                pattern[1] = ay + (by - ay) * g;
+            }
+            pattern[2] = (drawing && lead >= 1.0f) ? 0.0f : 5.0f;
+
+            for (int i = 0; i < 2; i++)
+                mpos_[i] = jobStartPos_[i] + (pattern[i] - jobStartPos_[i]) * lead;
+            mpos_[2] = pattern[2]; // the pen goes straight up or down, never glides
         }
     }
     else if (moving_ && state_ != State::Hold)
