@@ -16,6 +16,7 @@
 #define BOARD_HAS_POWER_RAILS 1
 #define BOARD_HAS_HAPTICS 0
 #define BOARD_HAS_BATTERY 0
+#define BOARD_HAS_MIC 0
 #define BOARD_ENCODER_QUADRATURE 1
 // Kept as the original unqualified name: every CrowPanel already in the
 // field looks for exactly this asset, and renaming it would strand them.

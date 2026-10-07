@@ -20,6 +20,7 @@
 #define BOARD_HAS_POWER_RAILS 0
 #define BOARD_HAS_HAPTICS 1
 #define BOARD_HAS_BATTERY 1
+#define BOARD_HAS_MIC 1
 #define BOARD_ENCODER_QUADRATURE 0 // pulse-per-direction, see encoder.cpp
 #define BOARD_OTA_ASSET_NAME "terradial-knob18-ota.bin"
 
@@ -49,6 +50,10 @@
 // No push switch: PIN_ENCODER_SW is deliberately absent.
 #define PIN_ENCODER_A 8
 #define PIN_ENCODER_B 7
+
+// ---- Microphone (PDM, straight onto the S3) ----
+#define PIN_MIC_CLK 45
+#define PIN_MIC_DATA 46
 
 // ---- Battery sense ----
 // The LiPo and its charger live on the back board and feed the "5V"

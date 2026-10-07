@@ -19,6 +19,8 @@
 #include "display/demo_tour.h"
 #include "input/encoder.h"
 #include "input/haptics.h"
+#include "input/mic.h"
+#include "display/ui_spiro.h"
 #include "led/panel_ring.h"
 #include "net/demo_mode.h"
 #include "power/battery.h"
@@ -298,6 +300,7 @@ void setup()
     initTouchAndDisplay();
     Haptics::begin(); // after touch: it shares the bus touch.begin() brings up
     Battery::begin();
+    Mic::begin();
     jogWheel.begin();
 
     UiNav::begin();
@@ -327,6 +330,7 @@ void loop()
     Battery::update(); // time-gated to every 2s inside
     DemoTour::update(); // before UiNav, so a scripted input lands this iteration
     uiJobProgressSample(fluidNC.status()); // every report, not every 150ms refresh
+    uiSpiroUpdate(); // a running spirograph plot is fed from here, whatever's on screen
     UiNav::update(); // also drives uiLightsUpdate(), but only while Lights is on screen
     DemoBadge::update();
 

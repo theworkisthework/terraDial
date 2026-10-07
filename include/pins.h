@@ -23,6 +23,7 @@
 //   BOARD_HAS_HAPTICS          DRV2605 vibration driver on the touch bus
 //   BOARD_HAS_BATTERY          runs off a LiPo, with its voltage on an ADC
 //                              pin (src/power/battery)
+//   BOARD_HAS_MIC              a PDM microphone (src/input/mic)
 //   BOARD_ENCODER_QUADRATURE   1: standard A/B quadrature, 4 ticks per
 //                              detent. 0: "bidirectional switch" knob --
 //                              each detent pulses A (one way) or B (the
