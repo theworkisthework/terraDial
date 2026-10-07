@@ -15,8 +15,12 @@ LV_FONT_DECLARE(lucide_12)
 LV_FONT_DECLARE(lucide_14)
 LV_FONT_DECLARE(lucide_16)
 LV_FONT_DECLARE(lucide_18)
+LV_FONT_DECLARE(lucide_20)
 LV_FONT_DECLARE(lucide_24)
+LV_FONT_DECLARE(lucide_28)
 LV_FONT_DECLARE(lucide_32)
+LV_FONT_DECLARE(lucide_36)
+LV_FONT_DECLARE(lucide_48)
 
 #define LUCIDE_HOUSE              "\xEE\x83\xB5" // house
 #define LUCIDE_MOVE               "\xEE\x84\xA1" // move

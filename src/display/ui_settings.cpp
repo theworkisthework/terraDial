@@ -1,4 +1,5 @@
 #include "ui_settings.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "../config/settings.h"
 #include "jog_config.h" // PEN_UP_CMD / PEN_DOWN_CMD, for Reset to defaults
@@ -12,6 +13,8 @@
 #include "lgfx_config.h" // backlightSet()
 #include "radial_keyboard.h"
 #include "icon_logo.h"
+#include "../input/mic.h"
+#include "../input/haptics.h"
 #include "branding.h"
 #include "version.h"
 #include "../net/ota_updater.h"
@@ -43,9 +46,9 @@ namespace
     //
     // 64 at radius 76 leaves the selected chip 3px clear of the 82px hub,
     // which is what caps the near size here.
-    const lv_coord_t RING_RADIUS = 76;
-    const lv_coord_t RING_SIZE_NEAR = 64;
-    const lv_coord_t RING_SIZE_FAR = 26;
+    const lv_coord_t RING_RADIUS = px(76);
+    const lv_coord_t RING_SIZE_NEAR = px(64);
+    const lv_coord_t RING_SIZE_FAR = px(26);
     const float RING_SPREAD = 0.55f;
 
     RadialRing ring;
@@ -129,8 +132,8 @@ namespace
         // Extra space above, on top of the panel's 8px row gap, so each
         // section reads as its own group. Padding rather than a margin --
         // LVGL 8 has no margin styles.
-        lv_obj_set_style_pad_top(hdr, 10, 0);
-        lv_obj_set_style_text_font(hdr, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_pad_top(hdr, px(10), 0);
+        lv_obj_set_style_text_font(hdr, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(hdr, Palette::accentSecondary(), 0);
     }
 
@@ -283,7 +286,7 @@ namespace
         for (int i = 0; i < n; i++)
         {
             lv_obj_t *btn = lv_list_add_btn(scanList, LUCIDE_WIFI, WiFi.SSID(i).c_str());
-            lv_obj_set_style_text_font(btn, &lucide_16, 0); // icon + SSID, inherited by both labels
+            lv_obj_set_style_text_font(btn, &UI_ICONS_16, 0); // icon + SSID, inherited by both labels
             lv_obj_add_event_cb(btn, networkPickedCb, LV_EVENT_CLICKED, NULL);
         }
         WiFi.scanDelete();
@@ -302,7 +305,7 @@ namespace
     void openScanOverlay()
     {
         scanOverlay = lv_obj_create(lv_layer_top());
-        lv_obj_set_size(scanOverlay, 240, 240);
+        lv_obj_set_size(scanOverlay, px(240), px(240));
         lv_obj_set_style_bg_color(scanOverlay, Palette::bgApp(), 0);
         lv_obj_set_style_bg_opa(scanOverlay, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(scanOverlay, 0, 0);
@@ -315,41 +318,41 @@ namespace
         // above -- flex layout also silently overrides any manual
         // lv_obj_align() on its own children, so the two don't mix here).
         lv_obj_t *cancelBtn = lv_btn_create(scanOverlay);
-        lv_obj_set_size(cancelBtn, 28, 28);
+        lv_obj_set_size(cancelBtn, px(28), px(28));
         lv_obj_set_style_radius(cancelBtn, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(cancelBtn, Palette::bgSecondary(), 0);
-        lv_obj_align(cancelBtn, LV_ALIGN_TOP_MID, 0, 14);
+        lv_obj_align(cancelBtn, LV_ALIGN_TOP_MID, 0, px(14));
         lv_obj_add_event_cb(cancelBtn, scanCancelCb, LV_EVENT_CLICKED, NULL);
         lv_obj_t *cancelLbl = lv_label_create(cancelBtn);
         lv_label_set_text(cancelLbl, LUCIDE_X);
-        lv_obj_set_style_text_font(cancelLbl, &lucide_12, 0);
+        lv_obj_set_style_text_font(cancelLbl, &UI_ICONS_12, 0);
         lv_obj_center(cancelLbl);
 
         lv_obj_t *titleLbl = lv_label_create(scanOverlay);
         lv_label_set_text(titleLbl, "Select a network");
-        lv_obj_set_style_text_font(titleLbl, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(titleLbl, &UI_FONT_14, 0);
         lv_obj_set_style_text_color(titleLbl, lv_color_white(), 0);
-        lv_obj_align(titleLbl, LV_ALIGN_TOP_MID, 0, 46);
+        lv_obj_align(titleLbl, LV_ALIGN_TOP_MID, 0, px(46));
 
         scanStatusLbl = lv_label_create(scanOverlay);
-        lv_obj_set_style_text_font(scanStatusLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(scanStatusLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(scanStatusLbl, Palette::textMuted(), 0);
-        lv_obj_align(scanStatusLbl, LV_ALIGN_TOP_MID, 0, 68);
+        lv_obj_align(scanStatusLbl, LV_ALIGN_TOP_MID, 0, px(68));
 
         scanList = lv_list_create(scanOverlay);
-        lv_obj_set_size(scanList, 190, 108);
-        lv_obj_align(scanList, LV_ALIGN_CENTER, 0, 8);
+        lv_obj_set_size(scanList, px(190), px(108));
+        lv_obj_align(scanList, LV_ALIGN_CENTER, 0, px(8));
         lv_obj_set_style_bg_opa(scanList, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(scanList, 0, 0);
 
         scanRescanBtn = lv_btn_create(scanOverlay);
-        lv_obj_set_size(scanRescanBtn, 100, 30);
-        lv_obj_set_style_radius(scanRescanBtn, 15, 0);
-        lv_obj_align(scanRescanBtn, LV_ALIGN_BOTTOM_MID, 0, -16);
+        lv_obj_set_size(scanRescanBtn, px(100), px(30));
+        lv_obj_set_style_radius(scanRescanBtn, px(15), 0);
+        lv_obj_align(scanRescanBtn, LV_ALIGN_BOTTOM_MID, 0, px(-16));
         lv_obj_add_event_cb(scanRescanBtn, rescanCb, LV_EVENT_CLICKED, NULL);
         lv_obj_t *rescanLbl = lv_label_create(scanRescanBtn);
         lv_label_set_text(rescanLbl, "Rescan");
-        lv_obj_set_style_text_font(rescanLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(rescanLbl, &UI_FONT_12, 0);
         lv_obj_center(rescanLbl);
 
         runScan();
@@ -426,26 +429,26 @@ namespace
         lv_obj_t *card = makeCardShell("WI-FI");
 
         ssidLbl = lv_label_create(card);
-        lv_obj_set_style_text_font(ssidLbl, &lucide_12, 0); // text + a chevron
+        lv_obj_set_style_text_font(ssidLbl, &UI_ICONS_12, 0); // text + a chevron
         lv_obj_add_flag(ssidLbl, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(ssidLbl, ssidCb, LV_EVENT_CLICKED, NULL);
         refreshSsidLabel();
 
         passLbl = lv_label_create(card);
         lv_label_set_text(passLbl, "Password: (tap to edit)");
-        lv_obj_set_style_text_font(passLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(passLbl, &UI_FONT_12, 0);
         lv_obj_add_flag(passLbl, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(passLbl, passCb, LV_EVENT_CLICKED, NULL);
 
         wifiStatusLbl = lv_label_create(card);
-        lv_obj_set_style_text_font(wifiStatusLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(wifiStatusLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(wifiStatusLbl, Palette::textMuted(), 0);
         lv_label_set_text(wifiStatusLbl, "--");
 
         lv_obj_t *btn = lv_btn_create(card);
-        lv_obj_set_size(btn, 110, 34);
+        lv_obj_set_size(btn, px(110), px(34));
         lv_obj_set_style_bg_color(btn, Palette::accent(), 0);
-        lv_obj_set_style_radius(btn, 17, 0);
+        lv_obj_set_style_radius(btn, px(17), 0);
         lv_obj_add_event_cb(btn, connectCb, LV_EVENT_CLICKED, NULL);
         lv_obj_t *btnLbl = lv_label_create(btn);
         lv_label_set_text(btnLbl, "Connect");
@@ -453,11 +456,11 @@ namespace
         lv_obj_center(btnLbl);
 
         forgetBtn = lv_btn_create(card);
-        lv_obj_set_size(forgetBtn, 150, 30);
-        lv_obj_set_style_radius(forgetBtn, 15, 0);
+        lv_obj_set_size(forgetBtn, px(150), px(30));
+        lv_obj_set_style_radius(forgetBtn, px(15), 0);
         lv_obj_add_event_cb(forgetBtn, forgetCb, LV_EVENT_CLICKED, NULL);
         forgetLbl = lv_label_create(forgetBtn);
-        lv_obj_set_style_text_font(forgetLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(forgetLbl, &UI_FONT_12, 0);
         lv_obj_center(forgetLbl);
         disarmForget();
         refreshSsidLabel(); // sets the button's visibility
@@ -592,7 +595,7 @@ namespace
         lv_obj_t *btn = uiMakeButton(parent, text, &lbl);
         lv_obj_set_style_bg_color(btn, Palette::bgSecondary(), 0);
         lv_obj_set_style_bg_color(btn, Palette::bgSecondaryHover(), LV_STATE_PRESSED);
-        lv_obj_set_style_text_font(lbl, &lucide_12, 0); // icon + text
+        lv_obj_set_style_text_font(lbl, &UI_ICONS_12, 0); // icon + text
         lv_obj_set_style_text_color(lbl, Palette::text(), 0);
         lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
         if (outLabel) *outLabel = lbl;
@@ -700,6 +703,7 @@ namespace
         restyleSleepChips();
     }
 
+#if BOARD_HAS_LED_RING
     void sleepLedSliderCb(lv_event_t *e)
     {
         lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(e);
@@ -710,6 +714,7 @@ namespace
         Config::get().sleepLedBrightnessPct = (uint8_t)v;
         if (lv_event_get_code(e) == LV_EVENT_RELEASED) Config::save();
     }
+#endif
 
     lv_obj_t *makeDisplayCard()
     {
@@ -717,7 +722,7 @@ namespace
 
         lv_obj_t *brightRow = uiMakeRow(card);
         brightLbl = lv_label_create(brightRow);
-        lv_obj_set_style_text_font(brightLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(brightLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(brightLbl, Palette::textMuted(), 0);
         // Floor of 10%: 0 would black the panel out with no way to see the
         // slider well enough to turn it back up.
@@ -744,33 +749,34 @@ namespace
         lv_obj_set_style_bg_opa(chipRow, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(chipRow, 0, 0);
         lv_obj_set_style_pad_all(chipRow, 0, 0);
-        lv_obj_set_style_pad_column(chipRow, 4, 0);
+        lv_obj_set_style_pad_column(chipRow, px(4), 0);
         lv_obj_clear_flag(chipRow, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_flex_flow(chipRow, LV_FLEX_FLOW_ROW);
         for (int i = 0; i < SLEEP_OPTION_COUNT; i++)
         {
             lv_obj_t *chip = lv_obj_create(chipRow);
-            lv_obj_set_size(chip, 38, 26);
-            lv_obj_set_style_radius(chip, 13, 0);
+            lv_obj_set_size(chip, px(38), px(26));
+            lv_obj_set_style_radius(chip, px(13), 0);
             lv_obj_set_style_border_width(chip, 0, 0);
             lv_obj_set_style_pad_all(chip, 0, 0);
             lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_set_ext_click_area(chip, 4);
+            lv_obj_set_ext_click_area(chip, px(4));
             lv_obj_add_event_cb(chip, sleepChipCb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
             lv_obj_t *lbl = lv_label_create(chip);
             lv_label_set_text(lbl, SLEEP_OPTION_LABELS[i]);
-            lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
+            lv_obj_set_style_text_font(lbl, &UI_FONT_12, 0);
             lv_obj_center(lbl);
             sleepChips[i] = chip;
             sleepChipLbls[i] = lbl;
         }
         restyleSleepChips();
 
+#if BOARD_HAS_LED_RING
         // The ring stays lit while the screen is off, so machine state is
         // still readable across the room mid-plot.
         lv_obj_t *sleepLedRow = uiMakeRow(card);
         sleepLedLbl = lv_label_create(sleepLedRow);
-        lv_obj_set_style_text_font(sleepLedLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(sleepLedLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(sleepLedLbl, Palette::textMuted(), 0);
         lv_obj_t *sleepLedSlider = uiMakeSlider(sleepLedRow, 0, 100, Config::get().sleepLedBrightnessPct);
         lv_obj_add_event_cb(sleepLedSlider, sleepLedSliderCb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -780,6 +786,7 @@ namespace
             snprintf(buf, sizeof(buf), "Ring sleep brightness: %d%%", Config::get().sleepLedBrightnessPct);
             lv_label_set_text(sleepLedLbl, buf);
         }
+#endif
 
         return card;
     }
@@ -796,18 +803,18 @@ namespace
 
         lv_obj_t *capLbl = lv_label_create(parent);
         lv_label_set_text(capLbl, caption);
-        lv_obj_set_style_text_font(capLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(capLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(capLbl, Palette::textMuted(), 0);
 
         // Light background with dark modules, NOT the UI palette inverted:
         // scanners are far more reliable on conventional polarity, and a
         // code nobody's phone will read is decoration, not a link.
-        lv_obj_t *qr = lv_qrcode_create(parent, 104, Palette::bgApp(), lv_color_white());
+        lv_obj_t *qr = lv_qrcode_create(parent, px(104), Palette::bgApp(), lv_color_white());
         lv_qrcode_update(qr, url, strlen(url));
         // Quiet zone: the spec wants clear space around the symbol, and
         // without it the dark UI crowds the edge modules.
         lv_obj_set_style_border_color(qr, lv_color_white(), 0);
-        lv_obj_set_style_border_width(qr, 4, 0);
+        lv_obj_set_style_border_width(qr, px(4), 0);
     }
 
     // ---- firmware update, on the About card ----
@@ -913,24 +920,55 @@ namespace
         lv_label_set_long_mode(updateStatusLbl, LV_LABEL_LONG_WRAP);
         lv_obj_set_style_text_align(updateStatusLbl, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(updateStatusLbl, "");
-        lv_obj_set_style_text_font(updateStatusLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(updateStatusLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(updateStatusLbl, Palette::textMuted(), 0);
 
         updateBar = lv_bar_create(card);
-        lv_obj_set_size(updateBar, lv_pct(100), 8);
+        lv_obj_set_size(updateBar, lv_pct(100), px(8));
         lv_obj_set_style_bg_color(updateBar, Palette::bgPanel(), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(updateBar, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_radius(updateBar, 4, LV_PART_MAIN);
+        lv_obj_set_style_radius(updateBar, px(4), LV_PART_MAIN);
         lv_obj_set_style_bg_color(updateBar, Palette::accent(), LV_PART_INDICATOR);
-        lv_obj_set_style_radius(updateBar, 4, LV_PART_INDICATOR);
+        lv_obj_set_style_radius(updateBar, px(4), LV_PART_INDICATOR);
         lv_bar_set_range(updateBar, 0, 100);
         lv_obj_add_flag(updateBar, LV_OBJ_FLAG_HIDDEN);
     }
+
+    lv_obj_t *demoSwitch = nullptr;
 
     void demoModeCb(lv_event_t *e)
     {
         lv_obj_t *sw = lv_event_get_target(e);
         Demo::set(lv_obj_has_state(sw, LV_STATE_CHECKED));
+    }
+
+    // The spirograph lives at the top of Jobs by default. Switched out of
+    // there, this is where it lives instead: an Open button appears here,
+    // above Demo mode.
+    lv_obj_t *spiroOpenBtn = nullptr;
+
+    void spiroJobsCb(lv_event_t *e)
+    {
+        bool inJobs = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
+        Config::get().spiroInJobs = inJobs;
+        Config::save();
+        if (inJobs) lv_obj_add_flag(spiroOpenBtn, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(spiroOpenBtn, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void openSpiroCb(lv_event_t *) { UiNav::goSpiro(); }
+
+    void addSpiroControls(lv_obj_t *card)
+    {
+        lv_obj_t *row = uiMakeRow(card, "Spirograph in Jobs");
+        lv_obj_t *sw = uiMakeSwitch(row, Config::get().spiroInJobs);
+        lv_obj_add_event_cb(sw, spiroJobsCb, LV_EVENT_VALUE_CHANGED, NULL);
+
+        lv_obj_t *lbl;
+        spiroOpenBtn = uiMakeButton(card, LUCIDE_DRAFTING_COMPASS " Spirograph", &lbl);
+        lv_obj_set_style_text_font(lbl, &UI_ICONS_12, 0); // icon + word
+        lv_obj_add_event_cb(spiroOpenBtn, openSpiroCb, LV_EVENT_CLICKED, NULL);
+        if (Config::get().spiroInJobs) lv_obj_add_flag(spiroOpenBtn, LV_OBJ_FLAG_HIDDEN);
     }
 
     // Demo mode (net/demo_mode.h): a simulated plotter and lights, so the
@@ -942,14 +980,42 @@ namespace
         lv_obj_t *row = uiMakeRow(card, "Demo mode");
         lv_obj_t *sw = uiMakeSwitch(row, Demo::isOn());
         lv_obj_add_event_cb(sw, demoModeCb, LV_EVENT_VALUE_CHANGED, NULL);
+        demoSwitch = sw;
 
         lv_obj_t *hint = lv_label_create(card);
-        lv_label_set_text(hint, "Simulated plotter and lights -- nothing is sent to the machine. Left untouched for 20s it tours itself; touch to take over. Off again after a restart.");
+        lv_label_set_text(hint, "Simulated plotter and lights -- nothing is sent to the machine. Tours itself a few seconds after switching on; touch to take over, and it resumes after 20s untouched. Tap the DEMO tag or restart to leave.");
         lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
         lv_obj_set_width(hint, lv_pct(100));
         lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(hint, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(hint, Palette::textMuted(), 0);
+    }
+
+    // The easter egg's way in: tap the logo three times while saying
+    // "terraPen". It can't actually tell what was said -- the mic only
+    // knows someone was talking (input/mic.h) -- but nobody needs to know
+    // that. Seven quick taps also works, silently, on any board: the
+    // CrowPanel has no mic, and a mic that fails shouldn't lock the toy
+    // away for good.
+    lv_obj_t *aboutLogo = nullptr;
+    const int VOICE_TAPS = 3;
+    const int QUIET_TAPS = 7;
+    const uint32_t TAP_GAP_MS = 700;   // a pause longer than this starts over
+    const uint32_t VOICE_WINDOW_MS = 2500;
+    uint32_t lastTapAt = 0;
+    int taps = 0;
+
+    void logoTapCb(lv_event_t *)
+    {
+        uint32_t now = millis();
+        taps = (now - lastTapAt <= TAP_GAP_MS) ? taps + 1 : 1;
+        lastTapAt = now;
+
+        bool unlocked = (taps >= VOICE_TAPS && Mic::heardVoiceWithin(VOICE_WINDOW_MS)) || taps >= QUIET_TAPS;
+        if (!unlocked) return;
+        taps = 0;
+        Haptics::detent();
+        UiNav::goSpiro();
     }
 
     lv_obj_t *makeAboutCard()
@@ -958,6 +1024,9 @@ namespace
 
         lv_obj_t *logo = lv_img_create(card);
         lv_img_set_src(logo, &iconLogo);
+        lv_obj_add_flag(logo, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(logo, logoTapCb, LV_EVENT_CLICKED, NULL);
+        aboutLogo = logo;
         // Alpha-only: recolor_opa must be on or it draws nothing. This is
         // also what flips the print artwork's black stroke to light-on-dark.
         lv_obj_set_style_img_recolor(logo, Palette::text(), 0);
@@ -965,12 +1034,12 @@ namespace
 
         lv_obj_t *nameLbl = lv_label_create(card);
         lv_label_set_text(nameLbl, Branding::productName());
-        lv_obj_set_style_text_font(nameLbl, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(nameLbl, &UI_FONT_16, 0);
         lv_obj_set_style_text_color(nameLbl, Palette::text(), 0);
 
         lv_obj_t *siteLbl = lv_label_create(card);
         lv_label_set_text(siteLbl, Branding::siteLabel());
-        lv_obj_set_style_text_font(siteLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(siteLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(siteLbl, Palette::accent(), 0);
 
         // Directly under the name, because the first question anyone asks
@@ -980,7 +1049,7 @@ namespace
         char versionBuf[32];
         snprintf(versionBuf, sizeof(versionBuf), "Firmware %s", Version::firmware());
         lv_label_set_text(versionLbl, versionBuf);
-        lv_obj_set_style_text_font(versionLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(versionLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(versionLbl, Palette::textMuted(), 0);
 
         addLinkQr(card, "terrapen.xyz", Branding::siteUrl());
@@ -989,18 +1058,19 @@ namespace
 
         lv_obj_t *hostLbl = lv_label_create(card);
         lv_label_set_text(hostLbl, Branding::mdnsAddress());
-        lv_obj_set_style_text_font(hostLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(hostLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(hostLbl, Palette::text(), 0);
 
         aboutIpLbl = lv_label_create(card);
-        lv_obj_set_style_text_font(aboutIpLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(aboutIpLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(aboutIpLbl, Palette::textMuted(), 0);
 
         aboutUptimeLbl = lv_label_create(card);
-        lv_obj_set_style_text_font(aboutUptimeLbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(aboutUptimeLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(aboutUptimeLbl, Palette::textMuted(), 0);
 
         addUpdateControls(card);
+        addSpiroControls(card);
         addDemoControls(card);
 
         return card;
@@ -1075,12 +1145,12 @@ namespace
         lv_obj_set_style_bg_opa(chip, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(chip, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_border_width(chip, 0, 0);
-        lv_obj_set_style_shadow_width(chip, 12, 0);
+        lv_obj_set_style_shadow_width(chip, px(12), 0);
         lv_obj_set_style_shadow_color(chip, lv_color_black(), 0);
         lv_obj_set_style_shadow_opa(chip, LV_OPA_30, 0);
         lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_pad_all(chip, 0, 0);
-        lv_obj_set_ext_click_area(chip, 10);
+        lv_obj_set_ext_click_area(chip, px(10));
 
         lv_obj_t *lbl = lv_label_create(chip);
         lv_label_set_text(lbl, icon);
@@ -1109,13 +1179,13 @@ lv_obj_t *uiSettingsCreate()
     panels[3] = makeAboutCard();
 
     hub = lv_obj_create(screenRoot);
-    lv_obj_set_size(hub, 82, 82);
+    lv_obj_set_size(hub, px(82), px(82));
     lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(hub, Palette::bgSecondary(), 0);
     lv_obj_set_style_bg_color(hub, Palette::accentHover(), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(hub, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(hub, Palette::border(), 0);
-    lv_obj_set_style_border_width(hub, 1, 0);
+    lv_obj_set_style_border_width(hub, px(1), 0);
     lv_obj_set_style_pad_all(hub, 0, 0);
     lv_obj_clear_flag(hub, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(hub, LV_OBJ_FLAG_CLICKABLE);
@@ -1123,15 +1193,15 @@ lv_obj_t *uiSettingsCreate()
     lv_obj_center(hub);
 
     hubNameLbl = lv_label_create(hub);
-    lv_obj_set_style_text_font(hubNameLbl, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(hubNameLbl, &UI_FONT_14, 0);
     lv_obj_set_style_text_color(hubNameLbl, Palette::text(), 0);
-    lv_obj_align(hubNameLbl, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_align(hubNameLbl, LV_ALIGN_CENTER, 0, px(-8));
 
     hubHintLbl = lv_label_create(hub);
     lv_label_set_text(hubHintLbl, "open");
-    lv_obj_set_style_text_font(hubHintLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(hubHintLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(hubHintLbl, Palette::accent(), 0);
-    lv_obj_align(hubHintLbl, LV_ALIGN_CENTER, 0, 12);
+    lv_obj_align(hubHintLbl, LV_ALIGN_CENTER, 0, px(12));
 
     // Arc rather than a full circle, same reason as Jobs: on a full circle
     // four items land at 12/3/6/9 o'clock, and the 6 o'clock one sits right
@@ -1157,15 +1227,15 @@ lv_obj_t *uiSettingsCreate()
     // Custom back button rather than addBackButton(): this one has to step
     // out of an open category before it leaves the screen.
     lv_obj_t *back = lv_btn_create(screenRoot);
-    lv_obj_set_size(back, 36, 36);
+    lv_obj_set_size(back, px(36), px(36));
     lv_obj_set_style_radius(back, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(back, Palette::bgSecondary(), 0);
-    lv_obj_set_ext_click_area(back, 10);
-    lv_obj_align(back, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_set_ext_click_area(back, px(10));
+    lv_obj_align(back, LV_ALIGN_BOTTOM_MID, 0, px(-8));
     lv_obj_add_event_cb(back, backBtnCb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *backLbl = lv_label_create(back);
     lv_label_set_text(backLbl, LUCIDE_CHEVRON_LEFT);
-    lv_obj_set_style_text_font(backLbl, &lucide_16, 0);
+    lv_obj_set_style_text_font(backLbl, &UI_ICONS_16, 0);
     lv_obj_set_style_text_color(backLbl, Palette::textMuted(), 0);
     lv_obj_center(backLbl);
 
@@ -1192,7 +1262,7 @@ void uiSettingsHandleRotate(int32_t delta)
     {
         // Inside a category the knob scrolls its controls -- several of the
         // panels are taller than the round-safe area.
-        lv_obj_scroll_by(panels[openPanel], 0, -delta * 24, LV_ANIM_ON);
+        uiKnobScroll(panels[openPanel], delta);
         return;
     }
     for (int32_t i = 0; i < delta; i++) ring.selectNext();
@@ -1238,6 +1308,18 @@ void uiSettingsOpenWifiSetup()
 void uiSettingsUpdate()
 {
     if (!wifiStatusLbl) return;
+
+    // Listen only while the About card is actually in front of someone:
+    // the mic switches itself off a second after this stops asking.
+    if (openPanel == 3 && lv_scr_act() == screenRoot) Mic::listenFor(1000);
+
+    // Demo mode can also be left by tapping the DEMO tag (demo_badge.cpp);
+    // keep the switch saying what's true.
+    if (demoSwitch && lv_obj_has_state(demoSwitch, LV_STATE_CHECKED) != Demo::isOn())
+    {
+        if (Demo::isOn()) lv_obj_add_state(demoSwitch, LV_STATE_CHECKED);
+        else lv_obj_clear_state(demoSwitch, LV_STATE_CHECKED);
+    }
 
     wl_status_t status = WiFi.status();
     lv_label_set_text(wifiStatusLbl, status == WL_CONNECTED ? "Connected" : "Not connected");

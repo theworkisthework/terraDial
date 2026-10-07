@@ -47,9 +47,13 @@ import tempfile
 LUCIDE_VERSION = "1.48.0"
 LV_FONT_CONV_VERSION = "1.5.3"
 
-# Every Montserrat size lv_conf.h enables -- one Lucide font per size, each
-# falling back to its Montserrat twin.
-SIZES = [12, 14, 16, 18, 24, 32]
+# Every Montserrat size lv_conf.h can enable -- one Lucide font per size,
+# each falling back to its Montserrat twin. 12-32 are the 240px panel's
+# sizes; 20, 28, 36 and 48 are the ones the 360px panel adds when its
+# layout scales them by 1.5 (see include/ui_scale.h). Each font is only
+# compiled when lv_conf.h enables its twin, so a board pays for the sizes
+# it uses and no others.
+SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 36, 48]
 
 # Lucide names, as on lucide.dev. Each becomes a LUCIDE_<NAME> macro.
 ICONS = [
@@ -107,6 +111,9 @@ HEADER = os.path.join(HERE, "src", "display", "lucide_icons.h")
 
 
 def run(cmd, cwd=None):
+    # npm and npx are .cmd scripts on Windows, which subprocess won't find
+    # by bare name; which() resolves them through PATHEXT.
+    cmd = [shutil.which(cmd[0]) or cmd[0]] + cmd[1:]
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     if result.returncode != 0:
         sys.stderr.write(result.stdout + result.stderr)
@@ -140,7 +147,7 @@ def montserrat_metrics(size):
                                    "lv_font_montserrat_%d.c" % size))
     if not found:
         sys.exit("LVGL sources not found -- run `pio run` once first")
-    src = open(found[0]).read()
+    src = open(found[0], encoding="utf-8").read()
     return (int(re.search(r"\.line_height = (\d+)", src).group(1)),
             int(re.search(r"\.base_line = (-?\d+)", src).group(1)))
 
@@ -168,6 +175,20 @@ def match_montserrat(c_src, size):
     return c_src
 
 
+def guard(c_src, size):
+    """Compile the font only when its Montserrat fallback is enabled.
+
+    lv_font_conv already wraps the font in `#if LUCIDE_<size>`, defaulting
+    that to 1; default it to LV_FONT_MONTSERRAT_<size> instead. Without its
+    twin a font won't build (the fallback is undeclared), and a board that
+    doesn't use the size shouldn't carry it anyway.
+    """
+    default = "#define LUCIDE_%d 1\n" % size
+    if default not in c_src:
+        sys.exit("unexpected lv_font_conv output: no %r to retarget" % default.strip())
+    return c_src.replace(default, "#define LUCIDE_%d LV_FONT_MONTSERRAT_%d\n" % (size, size), 1)
+
+
 def macro_name(icon):
     return "LUCIDE_" + icon.upper().replace("-", "_")
 
@@ -179,7 +200,7 @@ def utf8_escape(codepoint):
 def main():
     with tempfile.TemporaryDirectory() as work:
         pkg = fetch_lucide(work)
-        codepoints = json.load(open(os.path.join(pkg, "font", "codepoints.json")))
+        codepoints = json.load(open(os.path.join(pkg, "font", "codepoints.json"), encoding="utf-8"))
         shutil.copy(os.path.join(pkg, "LICENSE"), os.path.join(FONT_DIR, "LICENSE-lucide.txt"))
         missing = [name for name in ICONS if name not in codepoints]
         if missing:
@@ -202,8 +223,8 @@ def main():
                  "--lv-font-name", name,
                  "--lv-fallback", "lv_font_montserrat_%d" % size,
                  "-o", name + ".c"], cwd=work)
-            c_src = match_montserrat(open(os.path.join(work, name + ".c")).read(), size)
-            open(os.path.join(FONT_DIR, name + ".c"), "w").write(FONT_NOTICE % LUCIDE_VERSION + c_src)
+            c_src = guard(match_montserrat(open(os.path.join(work, name + ".c"), encoding="utf-8").read(), size), size)
+            open(os.path.join(FONT_DIR, name + ".c"), "w", encoding="utf-8", newline="\n").write(FONT_NOTICE % LUCIDE_VERSION + c_src)
             print("wrote src/display/fonts/%s.c" % name)
 
     width = max(len(macro_name(n)) for n in ICONS)
@@ -226,7 +247,7 @@ def main():
     lines.append("")
     for name in ICONS:
         lines.append('#define %-*s "%s" // %s' % (width, macro_name(name), utf8_escape(codepoints[name]), name))
-    open(HEADER, "w").write("\n".join(lines) + "\n")
+    open(HEADER, "w", encoding="utf-8", newline="\n").write("\n".join(lines) + "\n")
     print("wrote src/display/lucide_icons.h (%d icons x %d sizes)" % (len(ICONS), len(SIZES)))
 
 

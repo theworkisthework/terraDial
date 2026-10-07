@@ -2,6 +2,7 @@
 #include <lvgl.h>
 #include "pins.h"
 #include "version.h"
+#include "ui_scale.h"
 #include "config/settings.h"
 #include "display/lgfx_config.h"
 #include "display/ui_nav.h"
@@ -13,27 +14,36 @@
 #include "display/ui_job_progress.h"
 #include "display/ui_park.h"
 #include "display/screen_sleep.h"
+#include "display/ui_brand.h"
 #include "display/demo_badge.h"
 #include "display/demo_tour.h"
 #include "input/encoder.h"
+#include "input/haptics.h"
+#include "input/mic.h"
+#include "display/ui_spiro.h"
 #include "led/panel_ring.h"
 #include "net/demo_mode.h"
+#include "power/battery.h"
 #include "net/fluidnc_client.h"
 #include "net/terrapixel_client.h"
 #include "net/wifi_manager.h"
 #include "net/ota_updater.h"
 #include <CST816D.h>
+#include <WiFi.h>
 
-// ---- terraDial: CrowPanel round-screen control panel for terraPen ----
+// ---- terraDial: round-screen control panel for terraPen ----
 // See the project plan for the staged build order; this file wires
 // together display/touch/encoder/LEDs, the FluidNC + terraPixel clients,
-// and the backlight idle timeout.
+// and the backlight idle timeout. Which board it's wiring is pins.h's
+// business.
 
 static LGFX gfx;
 static CST816D touch(PIN_TOUCH_SDA, PIN_TOUCH_SCL, PIN_TOUCH_RST, PIN_TOUCH_INT);
 
-static const uint32_t SCREEN_W = 240;
-static const uint32_t SCREEN_H = 240;
+// LVGL runs at the panel's own resolution. The screens are designed on a
+// 240px grid and scale themselves to it -- see include/ui_scale.h.
+static const uint32_t SCREEN_W = PANEL_RES;
+static const uint32_t SCREEN_H = PANEL_RES;
 
 // "Full" is whatever the user set on the Settings > Display brightness
 // slider, not a fixed 100.
@@ -43,6 +53,19 @@ static const uint32_t STATUS_UI_REFRESH_MS = 150; // back to the original value 
 static lv_disp_draw_buf_t drawBuf;
 static lv_color_t *lvBuf0 = nullptr;
 static lv_color_t *lvBuf1 = nullptr;
+
+#if BOARD_PANEL_EVEN_WINDOWS
+// Widen every area LVGL redraws to even pixel boundaries. Waveshare's own
+// driver rounds to even for this ST77916 glass, and an odd window is the
+// classic way to get a one-pixel shear on these QSPI panels.
+static void roundArea(lv_disp_drv_t *, lv_area_t *area)
+{
+    area->x1 &= ~1;
+    area->y1 &= ~1;
+    area->x2 |= 1;
+    area->y2 |= 1;
+}
+#endif
 
 static void dispFlush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colorP)
 {
@@ -58,6 +81,12 @@ static void dispFlush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *co
     uint32_t h = area->y2 - area->y1 + 1;
     gfx.startWrite();
     gfx.setAddrWindow(area->x1, area->y1, w, h);
+    //
+    // It also has to be ONE writePixels() per area: LovyanGFX's ST77916
+    // driver starts every writePixels() with a fresh RAMWR, which puts the
+    // panel's write pointer back at the window's top-left. Split into rows,
+    // each row overwrote the first and the rest of the window kept stale
+    // panel RAM -- vertical streaks, flecked with white.
     gfx.writePixels((lgfx::rgb565_t *)&colorP->full, w * h);
     gfx.endWrite();
     lv_disp_flush_ready(disp);
@@ -71,20 +100,20 @@ static void dispFlush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *co
 static void rotateTouchCoords(uint16_t &x, uint16_t &y)
 {
 #if DISPLAY_ROTATION == 1
-    uint16_t nx = SCREEN_H - 1 - y;
+    uint16_t nx = PANEL_RES - 1 - y;
     uint16_t ny = x;
     x = nx;
     y = ny;
 #elif DISPLAY_ROTATION == 2
-    x = SCREEN_W - 1 - x;
-    y = SCREEN_H - 1 - y;
+    x = PANEL_RES - 1 - x;
+    y = PANEL_RES - 1 - y;
 #elif DISPLAY_ROTATION == 3
     // Confirmed on hardware: the straightforward 90deg transform here
     // landed taps exactly 180deg opposite the wedge that was actually
     // tapped (e.g. tapping "Stop" opened "Pen", exactly across the dial) --
     // this is that transform with the 180deg error already cancelled out,
     // not a generic "rotation 3" formula.
-    uint16_t nx = SCREEN_W - 1 - y;
+    uint16_t nx = PANEL_RES - 1 - y;
     uint16_t ny = x;
     x = nx;
     y = ny;
@@ -118,6 +147,11 @@ static void touchpadRead(lv_indev_drv_t *drv, lv_indev_data_t *data)
         return;
     }
 
+    // The controller can report a pixel or two past the panel's edge;
+    // clamp before rotating, where it would wrap around via the unsigned
+    // subtraction.
+    if (x >= PANEL_RES) x = PANEL_RES - 1;
+    if (y >= PANEL_RES) y = PANEL_RES - 1;
     rotateTouchCoords(x, y);
     data->state = LV_INDEV_STATE_PR;
     data->point.x = x;
@@ -130,6 +164,7 @@ static void touchpadRead(lv_indev_drv_t *drv, lv_indev_data_t *data)
 // value written to PIN_LCD_BACKLIGHT.
 static void initPowerRails()
 {
+#if BOARD_HAS_POWER_RAILS
     pinMode(PIN_POWER_RAIL_1, OUTPUT);
     digitalWrite(PIN_POWER_RAIL_1, HIGH);
     pinMode(PIN_POWER_RAIL_2, OUTPUT);
@@ -137,6 +172,7 @@ static void initPowerRails()
 
     pinMode(PIN_POWER_LED, OUTPUT);
     digitalWrite(PIN_POWER_LED, LOW);
+#endif
 }
 
 static void initTouchAndDisplay()
@@ -172,6 +208,9 @@ static void initTouchAndDisplay()
     dispDrv.hor_res = SCREEN_W;
     dispDrv.ver_res = SCREEN_H;
     dispDrv.flush_cb = dispFlush;
+#if BOARD_PANEL_EVEN_WINDOWS
+    dispDrv.rounder_cb = roundArea;
+#endif
     dispDrv.draw_buf = &drawBuf;
     lv_disp_drv_register(&dispDrv);
 
@@ -190,7 +229,7 @@ static void initTouchAndDisplay()
     // Set here rather than as LV_INDEV_DEF_SCROLL_LIMIT in lv_conf.h: LVGL 8
     // redefines that macro unconditionally in lv_hal_indev.h, so the lv_conf
     // value never reached lv_indev_drv_init() and the driver stayed at 10.
-    indevDrv.scroll_limit = 30;
+    indevDrv.scroll_limit = px(30); // a fingertip's roll, so it scales with the pixels
     lv_indev_drv_register(&indevDrv);
 }
 
@@ -254,12 +293,15 @@ void setup()
 {
     Serial.begin(115200);
     delay(300); // give the USB-CDC serial monitor time to attach before the first prints
-    Serial.printf("terraDial boot -- firmware %s\n", Version::firmware());
+    Serial.printf("terraDial boot -- firmware %s on %s\n", Version::firmware(), BOARD_NAME);
 
     Config::begin();
 
     initPowerRails();
     initTouchAndDisplay();
+    Haptics::begin(); // after touch: it shares the bus touch.begin() brings up
+    Battery::begin();
+    Mic::begin();
     jogWheel.begin();
 
     UiNav::begin();
@@ -275,14 +317,75 @@ void setup()
     WifiManager::begin();
     startNetworkTask();
 
+    // The mark draws itself over the dial while Wi-Fi and FluidNC connect
+    // underneath, then clears away; a touch or a turn skips it.
+    UiBrand::showSplash();
+
     Serial.println("terraDial stage-2 bring-up ready");
+}
+
+// While the screen sleeps, nobody is looking at it, so stop paying for it:
+//  - the panel itself goes into its own sleep (the backlight is already off,
+//    but the controller keeps scanning its RAM out to the glass without it),
+//  - the CPU drops from 240MHz to 80MHz -- the lowest Wi-Fi allows,
+//  - and loop() idles longer between passes (see below).
+// A plot carries on regardless: networkTask still streams, just at 80MHz,
+// which is plenty for a WebSocket.
+//
+// Wi-Fi power-save is handled separately, in updateWifiPowerSave().
+static bool lowPower = false;
+
+// Wi-Fi power-saves between beacons only while the screen is asleep AND the
+// machine has nothing on. Modem sleep stays associated and the router holds
+// traffic for it, so it shouldn't cost the connection -- but a dropped
+// connection mid-plot can take the plot with it (FluidNC has been seen to
+// fall over when a client reconnects mid-job), so while anything is running
+// the radio stays at full power, screen asleep or not. Awake it's always full
+// power anyway, for a snappy status stream (wifi_manager.cpp).
+static bool wifiSaving = false;
+
+static void updateWifiPowerSave()
+{
+    const FluidNCStatus &st = fluidNC.status();
+    bool busy = st.jobActive || uiSpiroPlotActive() || st.mode == MachineMode::Run ||
+                st.mode == MachineMode::Hold || st.mode == MachineMode::Homing;
+    bool want = lowPower && !busy;
+    if (want == wifiSaving) return;
+    wifiSaving = want;
+    WiFi.setSleep(want);
+}
+
+static void setLowPower(bool on)
+{
+    lowPower = on;
+    if (on)
+    {
+        gfx.sleep();
+        setCpuFrequencyMhz(80);
+    }
+    else
+    {
+        setCpuFrequencyMhz(240);
+        gfx.wakeup();
+        // The panel's RAM survives its sleep, but repaint anyway: anything
+        // that changed while it slept was drawn into a sleeping controller.
+        lv_obj_invalidate(lv_scr_act());
+        lv_obj_invalidate(lv_layer_top());
+    }
+    Serial.printf("[power] %s\n", on ? "low power (screen asleep)" : "full power");
 }
 
 void loop()
 {
+    if (ScreenSleep::isAsleep() != lowPower) setLowPower(ScreenSleep::isAsleep());
+    updateWifiPowerSave();
+
     lv_timer_handler();
     jogWheel.update();
+    Battery::update(); // time-gated to every 2s inside
     DemoTour::update(); // before UiNav, so a scripted input lands this iteration
+    uiJobProgressSample(fluidNC.status()); // every report, not every 150ms refresh
+    uiSpiroUpdate(); // a running spirograph plot is fed from here, whatever's on screen
     UiNav::update(); // also drives uiLightsUpdate(), but only while Lights is on screen
     DemoBadge::update();
 
@@ -300,7 +403,10 @@ void loop()
     // FluidNC calls a jog and a plot the same thing (Run); this is the half
     // of the distinction the ring can't work out for itself.
     panelRing.setPlotting(fluidNC.status().jobActive);
-    panelRing.update();
+    // An on-screen ring with the screen asleep is animating for nobody --
+    // and every frame of it is a redraw and a panel write. LEDs stay lit
+    // through sleep on purpose, so the CrowPanel's carries on.
+    if (!(BOARD_HAS_SCREEN_RING && lowPower)) panelRing.update();
 
     static uint32_t lastStatusUiUpdate = 0;
     if (millis() - lastStatusUiUpdate > STATUS_UI_REFRESH_MS)
@@ -334,5 +440,8 @@ void loop()
     // left the WiFi/BT background task (and the I2C touch driver's own
     // timing) too little room on this core, which made things feel
     // laggier, not snappier.
-    delay(5);
+    // Asleep, nothing on screen needs 5ms turns: 20ms still catches a touch
+    // or a knob turn to wake it well inside a blink (the knob itself is
+    // sampled on its own timer, so no detents are lost either way).
+    delay(lowPower ? 20 : 5);
 }

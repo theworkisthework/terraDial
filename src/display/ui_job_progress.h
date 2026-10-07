@@ -7,6 +7,10 @@
 lv_obj_t *uiJobProgressCreate();
 void uiJobProgressUpdate(const FluidNCStatus &st);
 
+// Every loop iteration, whatever's on screen: records the head's path for
+// the plot mirror (plot_mirror.h). Cheap when nothing has moved.
+void uiJobProgressSample(const FluidNCStatus &st);
+
 // Toggles feed-hold/resume -- wired to both the on-screen pause button and
 // a knob click, per the mockup's "click knob also pauses".
 void uiJobProgressTogglePause();

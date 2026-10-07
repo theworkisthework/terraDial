@@ -1,4 +1,5 @@
 #include "demo_tour.h"
+#include "ui_scale.h"
 #include <Arduino.h>
 #include "../net/demo_mode.h"
 #include "../net/fluidnc_client.h"
@@ -8,12 +9,18 @@
 #include "ui_dial.h"
 #include "ui_files.h"
 #include "ui_settings.h"
+#include "ui_spiro.h"
 #include "radial_keyboard.h"
 #include "screen_sleep.h"
 
 namespace
 {
-    // How long the panel must be left alone before the tour (re)starts.
+    // How long the panel must be left alone before the tour starts. Short
+    // the first time after demo mode is switched on -- whoever flicked the
+    // switch wants to see the tour, and 20s of nothing read as the panel
+    // hanging -- and long once it has run: by then a pause means a visitor
+    // is using the panel, and the tour shouldn't snatch it back mid-poke.
+    const uint32_t TOUR_FIRST_IDLE_MS = 3000;
     const uint32_t TOUR_IDLE_MS = 20000;
     // Gap between the tour's knob detents -- slow enough to follow.
     const uint32_t DETENT_MS = 450;
@@ -28,6 +35,8 @@ namespace
         Dial,       // go to the dial and turn to item `arg`
         Category,   // turn the Settings ring to category `arg`
         MenuTurn,   // `arg` detents on a menu (honours "invert menu rotation")
+        JobsTurn,   // MenuTurn from the top of the Jobs root, counted in FILES:
+                    // steps over the spirograph entry when it's there
         RawTurn,    // `arg` raw detents (Jog: machine direction, never inverted)
         Click,
         LongPress,
@@ -49,6 +58,7 @@ namespace
         if (fluidNC.status().mode == MachineMode::Alarm) fluidNC.clearAlarm();
     }
     void goDial() { UiNav::goHome(); }
+    void goSpiro() { UiNav::goSpiro(); }
     void lightsBright() { terraPixel.setBrightness(255); }
     void lightsDim() { terraPixel.setBrightness(120); }
     void lightsParty() { terraPixel.toggleParty(); }
@@ -92,14 +102,14 @@ namespace
         // then run a job and follow it through Job Progress to the end.
         {Op::Dial, JOBS, 900, nullptr},
         {Op::Click, 0, 2000, nullptr},
-        {Op::MenuTurn, 1, 1200, nullptr},
+        {Op::JobsTurn, 1, 1200, nullptr},
         {Op::MenuTurn, 1, 1200, nullptr},
         {Op::MenuTurn, 2, 6000, nullptr},  // the long filename
         {Op::MenuTurn, -4, 1000, nullptr}, // back to "Portraits"
         {Op::Click, 0, 2500, nullptr},     // open it
         {Op::MenuTurn, 1, 1500, nullptr},
         {Op::LongPress, 0, 2000, nullptr}, // up to the SD root
-        {Op::MenuTurn, 2, 1500, nullptr},  // snowflake.gcode
+        {Op::JobsTurn, 2, 1500, nullptr},  // refraction.gcode
         {Op::Click, 0, 8000, nullptr},     // run -- Job Progress opens itself
         {Op::Click, 0, 3000, nullptr},     // pause
         {Op::Click, 0, 1000, nullptr},     // resume
@@ -126,10 +136,23 @@ namespace
         {Op::MenuTurn, -3, 800, nullptr},
         {Op::LongPress, 0, 1000, nullptr},
 
+        // Spirograph: turn a gear, roll it outside, layer copies, then
+        // home and plot a flower for real (into the simulator).
+        {Op::Call, 0, 300, SpiroTour::begin},
+        {Op::Call, 0, 3200, goSpiro},       // the flower draws itself
+        {Op::RawTurn, 4, 3500, nullptr},    // gear 32 -> 36
+        {Op::Call, 0, 3500, SpiroTour::toggleOutside},
+        {Op::Call, 0, 300, SpiroTour::toggleOutside},
+        {Op::Call, 0, 300, SpiroTour::selectCopies},
+        {Op::RawTurn, 2, 5000, nullptr},    // x3: interleaved copies
+        {Op::Call, 0, 28000, SpiroTour::plotFlower}, // lift, home, plot
+        {Op::Call, 0, 300, SpiroTour::end},
+        {Op::LongPress, 0, 1000, nullptr},
+
         // E-Stop: start a job, stop it mid-run, clear the alarm.
         {Op::Dial, JOBS, 900, nullptr},
         {Op::Click, 0, 2000, nullptr},
-        {Op::MenuTurn, 3, 1200, nullptr},  // spirograph_rose.gcode
+        {Op::JobsTurn, 3, 1200, nullptr},  // spirograph_rose.gcode
         {Op::Click, 0, 6000, nullptr},     // run
         {Op::LongPress, 0, 1000, nullptr}, // leave it running
         {Op::Dial, ESTOP, 900, nullptr},
@@ -154,6 +177,7 @@ namespace
 
     bool running = false;
     bool demoWasOn = false;
+    bool startedSinceOn = false; // has the tour run since demo was switched on?
     uint32_t lastRealInputAt = 0;
 
     int stepIndex = 0;
@@ -217,6 +241,7 @@ namespace
                 detents = menuToRaw(ringSteps(uiSettingsSelectedCategory(), s.arg, 4));
                 break;
             case Op::MenuTurn: detents = menuToRaw(s.arg); break;
+            case Op::JobsTurn: detents = menuToRaw(s.arg + uiFilesSpiroSlots()); break;
             case Op::RawTurn: detents = s.arg; break;
             case Op::Click: pendingEvent = ButtonEvent::Click; break;
             case Op::LongPress: pendingEvent = ButtonEvent::LongPress; break;
@@ -255,12 +280,15 @@ namespace DemoTour
             // Just switched on (by hand): the idle clock starts now, so the
             // tour doesn't jump in under the finger that flicked the switch.
             demoWasOn = true;
+            startedSinceOn = false;
             lastRealInputAt = now;
         }
 
         if (!running)
         {
-            if (now - lastRealInputAt < TOUR_IDLE_MS) return;
+            uint32_t idleNeeded = startedSinceOn ? TOUR_IDLE_MS : TOUR_FIRST_IDLE_MS;
+            if (now - lastRealInputAt < idleNeeded) return;
+            startedSinceOn = true;
             start();
         }
 

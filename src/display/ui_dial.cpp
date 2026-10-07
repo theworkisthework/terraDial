@@ -1,7 +1,9 @@
 #include "ui_dial.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "palette.h"
 #include "radial_ring.h"
+#include "../power/battery.h"
 #include "ui_widgets.h"
 #include <string.h>
 
@@ -80,7 +82,7 @@ namespace
     // Holds the selected item's name + machine status. Sized so the widest
     // status word, "CONNECTING", fits across the hub at the status line's
     // height -- at 82px it was clipped by the hub's curve.
-    const lv_coord_t HUB_SIZE = 96;
+    const lv_coord_t HUB_SIZE = px(96);
 
     // Ring geometry. The ring sits out near the glass so the face is dial,
     // not margin: the selected chip is centred in the band between the
@@ -93,9 +95,9 @@ namespace
     // A harder spread (it was 0.55, with 24px far chips) made the top
     // three chips legible at the cost of bunching the rest into a
     // cluster at the bottom and leaving the band around it empty.
-    const lv_coord_t RING_RADIUS = 84;
-    const lv_coord_t RING_SIZE_NEAR = 62;
-    const lv_coord_t RING_SIZE_FAR = 34;
+    const lv_coord_t RING_RADIUS = px(84);
+    const lv_coord_t RING_SIZE_NEAR = px(62);
+    const lv_coord_t RING_SIZE_FAR = px(34);
     const lv_opa_t RING_OPA_FAR = 100;
     const float RING_SPREAD = 0.3f;
 
@@ -103,6 +105,7 @@ namespace
     lv_obj_t *statusLbl = nullptr;
     bool statusPulsing = false;
     lv_obj_t *nameLbl = nullptr;
+    lv_obj_t *batteryLbl = nullptr; // only on boards with a battery
     lv_obj_t *iconObjs[DIAL_ITEM_COUNT] = {nullptr};
 
     // Which icon size each item is currently drawn at -- see uiRingIconSize.
@@ -153,7 +156,7 @@ namespace
         lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(card, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_border_width(card, 0, 0);
-        lv_obj_set_style_shadow_width(card, 12, 0);
+        lv_obj_set_style_shadow_width(card, px(12), 0);
         lv_obj_set_style_shadow_color(card, lv_color_black(), 0);
         lv_obj_set_style_shadow_opa(card, LV_OPA_30, 0);
         lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
@@ -161,7 +164,7 @@ namespace
         // Extends the touch area beyond the drawn circle without changing
         // how it looks -- the shrunken off-top cards are much smaller than a
         // fingertip.
-        lv_obj_set_ext_click_area(card, 10);
+        lv_obj_set_ext_click_area(card, px(10));
 
         {
             lv_obj_t *iconLbl = lv_label_create(card);
@@ -257,6 +260,31 @@ namespace
             default:                  return Palette::textMuted();
         }
     }
+
+    // Symbol plus percentage on battery, a plug on USB (where the level
+    // can't be read -- see battery.h). Red from 15% down: that's roughly
+    // the point to plug in before a plot rather than during one.
+    void updateBatteryLabel()
+    {
+        if (!batteryLbl) return;
+        const BatteryStatus &b = Battery::status();
+
+        char text[24];
+        if (b.external) snprintf(text, sizeof(text), LV_SYMBOL_USB);
+        else
+        {
+            const char *sym = b.percent > 80   ? LV_SYMBOL_BATTERY_FULL
+                              : b.percent > 55 ? LV_SYMBOL_BATTERY_3
+                              : b.percent > 30 ? LV_SYMBOL_BATTERY_2
+                              : b.percent > 10 ? LV_SYMBOL_BATTERY_1
+                                               : LV_SYMBOL_BATTERY_EMPTY;
+            snprintf(text, sizeof(text), "%s %u%%", sym, b.percent);
+        }
+        // Only on a change, like the status label: this runs every 150ms.
+        if (strcmp(lv_label_get_text(batteryLbl), text) != 0) lv_label_set_text(batteryLbl, text);
+        bool low = !b.external && b.percent <= 15;
+        lv_obj_set_style_text_color(batteryLbl, low ? Palette::alert() : Palette::textMuted(), 0);
+    }
 }
 
 lv_obj_t *uiDialCreate()
@@ -273,7 +301,7 @@ lv_obj_t *uiDialCreate()
     lv_obj_set_style_bg_color(hub, Palette::bgSecondary(), 0);
     lv_obj_set_style_bg_opa(hub, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(hub, Palette::border(), 0);
-    lv_obj_set_style_border_width(hub, 1, 0);
+    lv_obj_set_style_border_width(hub, px(1), 0);
     lv_obj_set_style_pad_all(hub, 0, 0);
     lv_obj_clear_flag(hub, LV_OBJ_FLAG_SCROLLABLE);
     // The hub names the selected item, so tapping it opens that item -- a
@@ -284,19 +312,31 @@ lv_obj_t *uiDialCreate()
     lv_obj_align(hub, LV_ALIGN_CENTER, 0, 0);
 
     nameLbl = lv_label_create(hub);
-    lv_obj_set_style_text_font(nameLbl, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(nameLbl, &UI_FONT_14, 0);
     lv_obj_set_style_text_color(nameLbl, Palette::text(), 0);
-    lv_obj_align(nameLbl, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_align(nameLbl, LV_ALIGN_CENTER, 0, px(-8));
 
     statusLbl = lv_label_create(hub);
-    lv_obj_set_style_text_font(statusLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(statusLbl, &UI_FONT_12, 0);
     // Pinned to the width the round hub has at this height, so a status
     // too long to fit scrolls within it instead of being cut off by the
     // hub's curve. Every current word fits; this is the safety net.
-    lv_obj_set_width(statusLbl, HUB_SIZE - 12);
+    lv_obj_set_width(statusLbl, HUB_SIZE - px(12));
     lv_obj_set_style_text_align(statusLbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(statusLbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_obj_align(statusLbl, LV_ALIGN_CENTER, 0, 12);
+    lv_obj_align(statusLbl, LV_ALIGN_CENTER, 0, px(12));
+
+    // Battery, on boards that run off one: the bottom of the hub is the one
+    // spot on the home screen that never moves and never has anything over
+    // it. The symbols come with Montserrat, so no Lucide glyph is needed.
+    if (Battery::status().present)
+    {
+        batteryLbl = lv_label_create(hub);
+        lv_obj_set_style_text_font(batteryLbl, &UI_FONT_12, 0);
+        lv_obj_set_style_text_color(batteryLbl, Palette::textMuted(), 0);
+        lv_label_set_text(batteryLbl, "");
+        lv_obj_align(batteryLbl, LV_ALIGN_CENTER, 0, px(31));
+    }
 
     ring.create(scr, RING_RADIUS, RING_SIZE_NEAR, RING_SIZE_FAR, LV_OPA_COVER, RING_OPA_FAR);
     ring.setSpread(RING_SPREAD);
@@ -340,4 +380,5 @@ void uiDialUpdate(const FluidNCStatus &st)
     if (strcmp(lv_label_get_text(statusLbl), text) != 0) lv_label_set_text(statusLbl, text);
     lv_obj_set_style_text_color(statusLbl, colorForMode(st.mode), 0);
     setStatusPulsing(!st.jobActive && st.mode == MachineMode::Boot);
+    updateBatteryLabel();
 }

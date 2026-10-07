@@ -12,9 +12,16 @@
 // Drawn as an overlay on lv_layer_top() rather than as a screen in ui_nav's
 // list, so it can appear over anything without disturbing where the user
 // was -- dismissing it returns them exactly where they left off.
+//
+// The mark draws itself each time it appears (LogoDraw: a pen tracing the
+// stroke), and the name and site fade in once the pen lifts.
 namespace UiBrand
 {
     void show();
+    // The same screen as a boot splash: it takes itself away once the mark
+    // has drawn and held for a moment. Any input dismisses it sooner, the
+    // same way it dismisses the idle screen.
+    void showSplash();
     void hide();
     bool isShown();
 }

@@ -1,6 +1,8 @@
 #include "ui_lights.h"
+#include "ui_scale.h"
 #include "../net/terrapixel_client.h"
 #include "../led/panel_ring.h"
+#include "pins.h"
 #include "palette.h"
 #include "ui_screen_shell.h"
 #include "ui_widgets.h"
@@ -84,7 +86,7 @@ lv_obj_t *uiLightsCreate()
     lv_obj_set_scrollbar_mode(railHeader, LV_SCROLLBAR_MODE_OFF);
 
     connDot = lv_obj_create(railHeader);
-    lv_obj_set_size(connDot, 10, 10);
+    lv_obj_set_size(connDot, px(10), px(10));
     lv_obj_set_style_radius(connDot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(connDot, Palette::textFaint(), 0);
     lv_obj_set_style_border_width(connDot, 0, 0);
@@ -92,14 +94,16 @@ lv_obj_t *uiLightsCreate()
 
     railModeLabel = lv_label_create(railHeader);
     lv_label_set_text(railModeLabel, "Rail: --");
-    lv_obj_set_style_text_font(railModeLabel, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(railModeLabel, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(railModeLabel, Palette::textMuted(), 0);
-    lv_obj_set_style_pad_left(railModeLabel, 6, 0);
+    lv_obj_set_style_pad_left(railModeLabel, px(6), 0);
 
-    // -- panel ring (local, always available) --
-    lv_obj_t *panelRow = uiMakeRow(panel, "Panel ring brightness");
+    // -- panel ring (local, always available -- LEDs or drawn on screen) --
+#if BOARD_HAS_LED_RING || BOARD_HAS_SCREEN_RING
+    lv_obj_t *panelRow = uiMakeRow(panel, BOARD_HAS_LED_RING ? "Panel ring brightness" : "Screen ring brightness");
     panelSlider = uiMakeSlider(panelRow, 0, 100, panelRing.brightness());
     lv_obj_add_event_cb(panelSlider, panelSliderCb, LV_EVENT_VALUE_CHANGED, NULL);
+#endif
 
     // -- terraPixel rail --
     lv_obj_t *filmRow = uiMakeRow(panel, "Film mode");
@@ -124,9 +128,7 @@ lv_obj_t *uiLightsCreate()
 void uiLightsHandleRotate(int32_t delta)
 {
     if (!lightsPanel || delta == 0) return;
-    // Same step as a Settings category panel so scrolling feels identical
-    // wherever the knob is scrolling a page rather than stepping a ring.
-    lv_obj_scroll_by(lightsPanel, 0, -delta * 24, LV_ANIM_ON);
+    uiKnobScroll(lightsPanel, delta);
 }
 
 void uiLightsOnShow()
@@ -139,7 +141,7 @@ void uiLightsOnShow()
 
     suppressEvents = true;
 
-    lv_slider_set_value(panelSlider, panelRing.brightness(), LV_ANIM_OFF);
+    if (panelSlider) lv_slider_set_value(panelSlider, panelRing.brightness(), LV_ANIM_OFF);
 
     if (st.reachable)
     {

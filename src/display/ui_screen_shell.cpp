@@ -1,4 +1,5 @@
 #include "ui_screen_shell.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "palette.h"
 #include "ui_nav.h"
@@ -16,16 +17,16 @@ void addBackButton(lv_obj_t *screen, lv_event_cb_t onBack)
     // the safe-inset convention the E-Stop/Alarm Clear/Job Progress
     // screens already use for their own bottom-anchored content.
     lv_obj_t *btn = lv_btn_create(screen);
-    lv_obj_set_size(btn, 36, 36);
+    lv_obj_set_size(btn, px(36), px(36));
     lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(btn, Palette::bgSecondary(), 0);
-    lv_obj_set_ext_click_area(btn, 10); // easier to hit near the curved bezel
-    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_set_ext_click_area(btn, px(10)); // easier to hit near the curved bezel
+    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, px(-8));
     lv_obj_add_event_cb(btn, onBack ? onBack : backBtnCb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, LUCIDE_CHEVRON_LEFT);
-    lv_obj_set_style_text_font(lbl, &lucide_16, 0);
+    lv_obj_set_style_text_font(lbl, &UI_ICONS_16, 0);
     lv_obj_set_style_text_color(lbl, Palette::textMuted(), 0);
     lv_obj_center(lbl);
 }
@@ -40,17 +41,17 @@ void addEstopButton(lv_obj_t *screen)
     // room to spare, and ext_click_area gives back the touch target that
     // costs.
     lv_obj_t *btn = lv_btn_create(screen);
-    lv_obj_set_size(btn, 26, 26);
+    lv_obj_set_size(btn, px(26), px(26));
     lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(btn, Palette::alert(), 0);
     lv_obj_set_style_shadow_width(btn, 0, 0);
-    lv_obj_set_ext_click_area(btn, 8);
-    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, -38, -14);
+    lv_obj_set_ext_click_area(btn, px(8));
+    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, px(-38), px(-14));
     lv_obj_add_event_cb(btn, estopPipCb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, LUCIDE_OCTAGON_X); // the dial's E-Stop icon
-    lv_obj_set_style_text_font(lbl, &lucide_12, 0);
+    lv_obj_set_style_text_font(lbl, &UI_ICONS_12, 0);
     lv_obj_set_style_text_color(lbl, Palette::accentFg(), 0);
     lv_obj_center(lbl);
 }
@@ -75,32 +76,32 @@ ScreenShell createScreenShell(const char *title, const char *icon)
     lv_obj_set_style_bg_opa(header, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(header, 0, 0);
     lv_obj_set_style_pad_all(header, 0, 0);
-    lv_obj_set_style_pad_column(header, 6, 0);
+    lv_obj_set_style_pad_column(header, px(6), 0);
     lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(header, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_align(header, LV_ALIGN_TOP_MID, 0, 22);
+    lv_obj_align(header, LV_ALIGN_TOP_MID, 0, px(22));
 
     lv_obj_t *iconLbl = lv_label_create(header);
     lv_label_set_text(iconLbl, icon);
-    lv_obj_set_style_text_font(iconLbl, &lucide_14, 0);
+    lv_obj_set_style_text_font(iconLbl, &UI_ICONS_14, 0);
     lv_obj_set_style_text_color(iconLbl, Palette::textMuted(), 0);
 
     lv_obj_t *titleLbl = lv_label_create(header);
     lv_label_set_text(titleLbl, title);
-    lv_obj_set_style_text_font(titleLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(titleLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(titleLbl, Palette::textMuted(), 0);
 
     shell.content = lv_obj_create(shell.screen);
-    lv_obj_set_size(shell.content, 186, 186);
+    lv_obj_set_size(shell.content, px(186), px(186));
     lv_obj_center(shell.content);
     lv_obj_set_style_bg_opa(shell.content, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(shell.content, 0, 0);
     lv_obj_set_style_radius(shell.content, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_clip_corner(shell.content, true, 0);
-    lv_obj_set_style_pad_hor(shell.content, 22, 0);
-    lv_obj_set_style_pad_ver(shell.content, 18, 0);
-    lv_obj_set_style_pad_row(shell.content, 8, 0);
+    lv_obj_set_style_pad_hor(shell.content, px(22), 0);
+    lv_obj_set_style_pad_ver(shell.content, px(18), 0);
+    lv_obj_set_style_pad_row(shell.content, px(8), 0);
     lv_obj_set_flex_flow(shell.content, LV_FLEX_FLOW_COLUMN);
     // Center children both along the main axis (as a group, vertically) and
     // the cross axis (each child horizontally) -- a flex container ignores

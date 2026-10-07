@@ -19,7 +19,7 @@ namespace
     const SimFile SIM_FILES[] = {
         {"", "Portraits", -1},
         {"", "Test patterns", -1},
-        {"", "snowflake.gcode", 91109},
+        {"", "refraction.gcode", 91109}, // what the demo job draws: a fan of wavy arcs
         {"", "spirograph_rose.gcode", 248331},
         {"", "botanical study - fern fronds, layer 2 of 3 (0.3mm fineliner).gcode", 532175},
         {"", "calibration_square.nc", 2048},
@@ -64,6 +64,14 @@ namespace
         return false;
     }
 
+    // A line that moves an axis: has an X, Y or Z word and isn't a $ command.
+    bool isMoveLine(const char *text)
+    {
+        if (text[0] == '$') return false;
+        float v;
+        return word(text, 'X', v) || word(text, 'Y', v) || word(text, 'Z', v);
+    }
+
     bool hasToken(const char *text, const char *token)
     {
         size_t n = strlen(token);
@@ -92,6 +100,45 @@ void MachineSim::reset()
     jobElapsedMs_ = 0;
     lastTickMs_ = lastReportMs_ = millis();
     deleted_ = 0;
+    modalFeed_ = DEFAULT_FEED_MM_MIN;
+    clearQueues();
+}
+
+void MachineSim::clearQueues()
+{
+    planHead_ = planCount_ = 0;
+    inHead_ = inCount_ = 0;
+}
+
+void MachineSim::answer(const char *text, LineSink sink, void *ctx)
+{
+    say(sink, ctx, lineCommand(text, sink, ctx) ? "ok" : (state_ == State::Alarm ? "error:9" : "error:8"));
+}
+
+// Answers waiting lines in order, for as long as the planner has room for
+// the next one.
+void MachineSim::pumpInbox(LineSink sink, void *ctx)
+{
+    while (inCount_ > 0)
+    {
+        const char *front = inbox_[inHead_];
+        if (isMoveLine(front) && planCount_ >= PLAN_DEPTH) return;
+        answer(front, sink, ctx);
+        inHead_ = (inHead_ + 1) % INBOX_DEPTH;
+        inCount_--;
+    }
+}
+
+// Starts the next queued move, if there is one.
+bool MachineSim::nextPlannedMove()
+{
+    if (planCount_ == 0) return false;
+    const Move &m = plan_[planHead_];
+    startMove(m.target, m.feed);
+    planHead_ = (planHead_ + 1) % PLAN_DEPTH;
+    planCount_--;
+    state_ = State::Run;
+    return true;
 }
 
 void MachineSim::say(LineSink sink, void *ctx, const char *text)
@@ -138,7 +185,22 @@ void MachineSim::command(bool raw, const char *text, LineSink sink, void *ctx)
 {
     if (!raw)
     {
-        say(sink, ctx, lineCommand(text, sink, ctx) ? "ok" : (state_ == State::Alarm ? "error:9" : "error:8"));
+        // Behind lines already waiting, or a move with the planner full:
+        // wait, unanswered, like a line in FluidNC's receive buffer.
+        if (inCount_ > 0 || (isMoveLine(text) && planCount_ >= PLAN_DEPTH))
+        {
+            if (inCount_ >= INBOX_DEPTH)
+            {
+                say(sink, ctx, "error:8"); // a sender ignoring the oks: refuse rather than lose order
+                return;
+            }
+            int slot = (inHead_ + inCount_) % INBOX_DEPTH;
+            strncpy(inbox_[slot], text, INBOX_LINE - 1);
+            inbox_[slot][INBOX_LINE - 1] = '\0';
+            inCount_++;
+            return;
+        }
+        answer(text, sink, ctx);
         return;
     }
 
@@ -168,6 +230,7 @@ void MachineSim::command(bool raw, const char *text, LineSink sink, void *ctx)
 
         case 0x18: // soft reset
         {
+            clearQueues(); // FluidNC drops everything buffered on a reset
             bool inMotion = state_ == State::Run || state_ == State::Jog || state_ == State::Home ||
                             (state_ == State::Hold && millis() - holdStartedMs_ < HOLD_DECEL_MS);
             moving_ = false;
@@ -272,7 +335,10 @@ bool MachineSim::lineCommand(const char *text, LineSink sink, void *ctx)
         return true;
     }
 
-    if (state_ != State::Idle) return false;
+    // Idle, or already working through streamed moves (not an SD job, and
+    // not a jog or homing cycle): a move joins the queue.
+    bool streaming = (state_ == State::Run && !jobPath_[0]) || (state_ == State::Hold && heldFrom_ == State::Run && !jobPath_[0]);
+    if (state_ != State::Idle && !streaming) return false;
     gcodeMove(text);
     return true;
 }
@@ -296,10 +362,22 @@ void MachineSim::gcodeMove(const char *text)
     }
     if (!any) return; // modal-only line (G90, M5 ...): nothing moves
 
-    float feed = hasToken(text, "G0") ? RAPID_MM_MIN : DEFAULT_FEED_MM_MIN;
-    if (!hasToken(text, "G0")) word(text, 'F', feed);
-    startMove(target, feed);
-    state_ = State::Run; // FluidNC reports Run for any motion that isn't a jog
+    float f;
+    if (word(text, 'F', f) && f > 0) modalFeed_ = f;
+    float feed = hasToken(text, "G0") ? RAPID_MM_MIN : modalFeed_;
+
+    // Queued behind whatever's already moving; straight off if nothing is.
+    // Targets chain: a queued move starts from the previous one's end,
+    // which is mpos_ by the time it runs.
+    if (planCount_ < PLAN_DEPTH)
+    {
+        Move &m = plan_[(planHead_ + planCount_) % PLAN_DEPTH];
+        memcpy(m.target, target, sizeof(m.target));
+        m.feed = feed;
+        planCount_++;
+    }
+    if (!moving_ && state_ != State::Hold) nextPlannedMove();
+    else if (state_ == State::Idle) state_ = State::Run; // FluidNC reports Run for any motion that isn't a jog
 }
 
 void MachineSim::deleteFile(const char *path)
@@ -319,6 +397,9 @@ void MachineSim::tick(LineSink sink, void *ctx)
     if (dt > 200) dt = 200; // a stalled task shouldn't teleport the head
     lastTickMs_ = now;
 
+    pumpInbox(sink, ctx);
+    if (!moving_ && planCount_ > 0 && state_ != State::Hold && state_ != State::Alarm) nextPlannedMove();
+
     if (state_ == State::Run && jobPath_[0])
     {
         jobElapsedMs_ += dt;
@@ -333,21 +414,64 @@ void MachineSim::tick(LineSink sink, void *ctx)
         }
         else
         {
-            // Trace a Lissajous figure across the bed, lifting the pen now
-            // and then, so the X/Y/Z readouts look like a drawing.
-            float t = (float)jobElapsedMs_ / DEMO_JOB_MS;
-            float a = t * 2.0f * (float)M_PI * 6.0f;
-            float pattern[3] = {
-                DEMO_X_MAX_MM * 0.5f + DEMO_X_MAX_MM * 0.35f * sinf(3.0f * a),
-                MACHINE_Y_MAX_MM * 0.5f + MACHINE_Y_MAX_MM * 0.35f * sinf(2.0f * a),
-                fmodf(t * 40.0f, 1.0f) < 0.9f ? 0.0f : 5.0f,
-            };
-            // Glide in from wherever the head was over the first moments,
-            // rather than jumping the readouts straight onto the pattern.
+            // Draw something that looks like a plot, because the Job
+            // Progress screen draws it back (plot_mirror.h): a fan of wavy
+            // arcs radiating from the bottom-right of the bed, one at a
+            // time. Arcs alternate direction, so the pen-up travel between
+            // them is a short hop outwards rather than a trip back across.
+            // (This was a Lissajous figure retraced six times with a pen
+            // lift every second -- fine for the readouts, but mirrored on
+            // screen it read as a broken drawing going round in circles.)
+            const int ARCS = 9;
+            const float DRAW_SHARE = 0.85f; // of each arc's slot; the rest is travel
+            const float CX = DEMO_X_MAX_MM * 0.9f, CY = MACHINE_Y_MAX_MM * 0.1f;
+            const float R0 = 30.0f, R_STEP = 24.0f;
+            // Ripples along each quarter-turn. Few enough that the ten
+            // position reports a second land ~10 to a ripple -- more, and
+            // the mirror would draw them as zig-zags.
+            const float WAVE_MM = 5.0f, WAVES = 4.0f;
+
+            // The first moments glide in from wherever the head was, pen up.
             const float LEAD_IN_MS = 1500.0f;
-            float blend = jobElapsedMs_ >= LEAD_IN_MS ? 1.0f : jobElapsedMs_ / LEAD_IN_MS;
-            for (int i = 0; i < 3; i++)
-                mpos_[i] = jobStartPos_[i] + (pattern[i] - jobStartPos_[i]) * blend;
+            float lead = jobElapsedMs_ >= LEAD_IN_MS ? 1.0f : jobElapsedMs_ / LEAD_IN_MS;
+            float t = jobElapsedMs_ < LEAD_IN_MS ? 0.0f
+                                                 : (jobElapsedMs_ - LEAD_IN_MS) / (DEMO_JOB_MS - LEAD_IN_MS);
+
+            float slot = t * ARCS;
+            int k = (int)slot;
+            if (k >= ARCS) k = ARCS - 1;
+            float f = slot - k; // 0..1 through this arc's slot
+
+            // Arc k at a fraction u along it (0..1, in its own direction).
+            auto arcPoint = [&](int arc, float u, float &x, float &y) {
+                if (arc % 2) u = 1.0f - u;
+                float th = (float)M_PI * (0.5f + 0.5f * u); // straight up round to straight left
+                float r = R0 + R_STEP * arc + WAVE_MM * sinf(WAVES * 4.0f * th + arc * 0.9f);
+                x = CX + r * cosf(th);
+                y = CY + r * sinf(th);
+            };
+
+            float pattern[3];
+            bool drawing = f < DRAW_SHARE;
+            if (drawing)
+            {
+                arcPoint(k, f / DRAW_SHARE, pattern[0], pattern[1]);
+            }
+            else
+            {
+                // Travel: from the end of this arc to the start of the next.
+                float ax, ay, bx, by;
+                arcPoint(k, 1.0f, ax, ay);
+                arcPoint(k + 1 < ARCS ? k + 1 : k, 0.0f, bx, by);
+                float g = (f - DRAW_SHARE) / (1.0f - DRAW_SHARE);
+                pattern[0] = ax + (bx - ax) * g;
+                pattern[1] = ay + (by - ay) * g;
+            }
+            pattern[2] = (drawing && lead >= 1.0f) ? 0.0f : 5.0f;
+
+            for (int i = 0; i < 2; i++)
+                mpos_[i] = jobStartPos_[i] + (pattern[i] - jobStartPos_[i]) * lead;
+            mpos_[2] = pattern[2]; // the pen goes straight up or down, never glides
         }
     }
     else if (moving_ && state_ != State::Hold)
@@ -364,7 +488,9 @@ void MachineSim::tick(LineSink sink, void *ctx)
         {
             memcpy(mpos_, target_, sizeof(mpos_));
             moving_ = false;
-            if (state_ == State::Jog || state_ == State::Run || state_ == State::Home) state_ = State::Idle;
+            if (!nextPlannedMove() &&
+                (state_ == State::Jog || state_ == State::Run || state_ == State::Home))
+                state_ = State::Idle;
         }
         else
         {

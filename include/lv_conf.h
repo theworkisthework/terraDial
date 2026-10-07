@@ -67,7 +67,19 @@
 #define LV_FONT_MONTSERRAT_18 1
 #define LV_FONT_MONTSERRAT_24 1
 #define LV_FONT_MONTSERRAT_32 1
+// The 360px panel lays out at 1.5x (include/ui_scale.h), which takes each
+// size above to the next one along: 12->18, 14->20, 16->24, 18->28,
+// 24->36, 32->48. Only that board pays for the extra sizes. (Anything a
+// board never references is dropped at link time either way.)
+#if defined(BOARD_WAVESHARE_KNOB_1_8)
+#define LV_FONT_MONTSERRAT_20 1
+#define LV_FONT_MONTSERRAT_28 1
+#define LV_FONT_MONTSERRAT_36 1
+#define LV_FONT_MONTSERRAT_48 1
+#define LV_FONT_DEFAULT &lv_font_montserrat_24
+#else
 #define LV_FONT_DEFAULT &lv_font_montserrat_16
+#endif
 
 /*=================
  *  THEME USAGE

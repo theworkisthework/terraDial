@@ -32,6 +32,9 @@ struct AppSettings
     // Sent as-is by the Pen screen (see PEN_UP_CMD in jog_config.h). Swapped
     // wholesale for a machine whose pen lifts the other way, rather than
     // flipping a sign somewhere -- the commands stay what the user typed.
+    // The spirograph's entry at the top of the Jobs list. Off moves it to
+    // Settings > About instead, for anyone who'd rather Jobs held only jobs.
+    bool spiroInJobs;
     char penUpCmd[48];
     char penDownCmd[48];
     char wifiSsid[33];

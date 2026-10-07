@@ -20,7 +20,7 @@
 #endif
 
 #ifndef LUCIDE_14
-#define LUCIDE_14 1
+#define LUCIDE_14 LV_FONT_MONTSERRAT_14
 #endif
 
 #if LUCIDE_14
