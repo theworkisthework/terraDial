@@ -13,7 +13,9 @@
 //
 // Covers what the panel sends: jogs and jog-cancel, homing, $X, SD job
 // run/pause/resume/stop, file delete, work-zero (G10 L20) and plain G-code
-// moves (the Park macro). A job takes DEMO_JOB_MS and draws a fan of wavy
+// moves -- one at a time (the Park macro) or streamed (the spirograph),
+// through a small planner queue that paces the stream the way FluidNC's
+// does: when it's full, the next line's "ok" waits for room. A job takes DEMO_JOB_MS and draws a fan of wavy
 // arcs, pen down along each and up between them, so the position readouts
 // move and the Job Progress mirror has a believable plot to draw. The SD card is a fixed
 // set of folders and files, served as the same JSON FluidNC's HTTP
@@ -54,6 +56,23 @@ private:
     float target_[3] = {0, 0, 0};
     float feedMmMin_ = 0;
 
+    // Streamed G-code: moves waiting their turn, like FluidNC's planner.
+    // Lines that arrive while it's full wait in the inbox, unanswered,
+    // which is what makes a streamer wait for its "ok".
+    struct Move
+    {
+        float target[3];
+        float feed;
+    };
+    static const int PLAN_DEPTH = 16;
+    Move plan_[PLAN_DEPTH];
+    int planHead_ = 0, planCount_ = 0;
+    static const int INBOX_DEPTH = 24;
+    static const int INBOX_LINE = 96;
+    char inbox_[INBOX_DEPTH][INBOX_LINE];
+    int inHead_ = 0, inCount_ = 0;
+    float modalFeed_ = 0; // F is modal in G-code: it carries over to later lines
+
     // The running SD job.
     char jobPath_[256] = "";
     uint32_t jobElapsedMs_ = 0; // excludes time spent in Hold
@@ -71,5 +90,9 @@ private:
     void startMove(const float target[3], float feed);
     bool lineCommand(const char *text, LineSink sink, void *ctx); // false = rejected
     void gcodeMove(const char *text);
+    void answer(const char *text, LineSink sink, void *ctx);
+    void pumpInbox(LineSink sink, void *ctx);
+    bool nextPlannedMove();
+    void clearQueues();
     void deleteFile(const char *path);
 };

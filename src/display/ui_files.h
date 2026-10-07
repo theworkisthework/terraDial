@@ -16,6 +16,11 @@ void uiFilesHandleDoubleClick();             // open the Run/Delete/Cancel confi
 // false at the SD root -- ui_nav should only leave the screen then.
 bool uiFilesHandleBack();
 
+// How many entries come before the files at the SD root: 1 while the
+// spirograph sits at the top of Jobs, else 0. For the demo tour, whose
+// scripted turns count files.
+int uiFilesSpiroSlots();
+
 // Call every loop iteration: checks for a completed SD listing and
 // rebuilds the ring chips when one arrives.
 void uiFilesUpdate();

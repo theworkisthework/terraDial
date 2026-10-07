@@ -19,3 +19,16 @@ void uiSpiroHandleRotate(int32_t delta);
 // Every loop iteration, whatever's on screen: feeds a running plot to the
 // machine, so leaving the screen doesn't abandon a drawing half-way.
 void uiSpiroUpdate();
+
+// For the demo tour (demo_tour.cpp). begin() puts a known, quick-to-plot
+// pattern up (a three-petal flower) after keeping whatever was there, and
+// end() puts that back -- the tour shows the toy off without leaving a
+// visitor's settings changed.
+namespace SpiroTour
+{
+    void begin();
+    void toggleOutside();
+    void selectCopies();
+    void plotFlower(); // the begin() flower, 100mm, straight past the confirm
+    void end();
+}

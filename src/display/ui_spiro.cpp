@@ -6,6 +6,7 @@
 #include "ui_widgets.h"
 #include "../config/settings.h"
 #include "../net/fluidnc_client.h"
+#include "ui_pen.h"
 #include <esp_heap_caps.h>
 #include <math.h>
 #include <stdio.h>
@@ -157,16 +158,34 @@ namespace
     //
     // Lines: G21, G90, then per copy [pen up, travel to its start, pen
     // down, its points], then a final pen up.
+    //
+    // Before any of that: the pen lifts and the machine homes, so the plot
+    // lands at a known place on the bed rather than wherever the head was
+    // left. It's drawn in machine coordinates (G53, relative to the homing
+    // switches, as the Park macro moves) with MARGIN_MM clear of home on
+    // both axes: a 100mm drawing is centred at X75 Y75. The lift-then-home
+    // sequence is the Park macro's (ui_park.cpp), for the same reasons --
+    // see there.
 
+    const float MARGIN_MM = 25.0f;
     const float FEED_MM_MIN = 2000.0f;
     const int BATCH = 6;
     const uint32_t ACK_TIMEOUT_MS = 60000; // a full planner can hold an ok back a while
     const int HEAD_LINES = 2;
     const int COPY_LEAD = 3;
 
+    enum class Phase : uint8_t { Lift, AwaitHoming, AwaitHomed, Stream };
+    const uint32_t LIFT_SETTLE_MS = 500;
+    const uint32_t LIFT_TIMEOUT_MS = 8000;
+    const uint32_t HOMING_START_TIMEOUT_MS = 10000;
+    const uint32_t HOMING_DONE_TIMEOUT_MS = 180000;
+
     struct Plot
     {
         bool active = false;
+        Phase phase = Phase::Lift;
+        uint32_t phaseAt = 0;
+        uint32_t liftTicket = 0;
         float cx = 0, cy = 0, scale = 1; // mm per tooth
         int next = 0;   // next line to send
         int total = 0;  // lines in the whole plot
@@ -209,17 +228,19 @@ namespace
         float x, y;
         if (within == 0) { snprintf(out, n, "%s", cfg.penUpCmd); return; }
         if (within == 2) { snprintf(out, n, "%s", cfg.penDownCmd); return; }
+        // G53 is per line, not modal: every move says it's in machine
+        // coordinates.
         if (within == 1)
         {
             rawPoint(copy * (curve.perCopy + 1), x, y);
-            snprintf(out, n, "G0 X%.3f Y%.3f", plot.cx + x * plot.scale, plot.cy + y * plot.scale);
+            snprintf(out, n, "G53 G0 X%.3f Y%.3f", plot.cx + x * plot.scale, plot.cy + y * plot.scale);
             return;
         }
         rawPoint(linePoint(i), x, y);
         if (within == COPY_LEAD) // each copy's first draw move sets the feed
-            snprintf(out, n, "G1 F%.0f X%.3f Y%.3f", FEED_MM_MIN, plot.cx + x * plot.scale, plot.cy + y * plot.scale);
+            snprintf(out, n, "G53 G1 F%.0f X%.3f Y%.3f", FEED_MM_MIN, plot.cx + x * plot.scale, plot.cy + y * plot.scale);
         else
-            snprintf(out, n, "G1 X%.3f Y%.3f", plot.cx + x * plot.scale, plot.cy + y * plot.scale);
+            snprintf(out, n, "G53 G1 X%.3f Y%.3f", plot.cx + x * plot.scale, plot.cy + y * plot.scale);
     }
 
     void stopPlot(const char *why)
@@ -240,36 +261,104 @@ namespace
     }
 
     // Why the machine can't take a plot right now, or nullptr if it can.
+    // An alarm is fine: homing is what clears one.
     const char *notReadyReason()
     {
         const FluidNCStatus &st = fluidNC.status();
         if (!st.connected) return "Not connected to the plotter";
-        if (st.mode == MachineMode::Alarm) return "Clear the alarm first";
         // Done is the few seconds of celebration after a job: idle really.
-        if (st.jobActive || (st.mode != MachineMode::Idle && st.mode != MachineMode::Done))
+        if (st.jobActive || (st.mode != MachineMode::Idle && st.mode != MachineMode::Done &&
+                             st.mode != MachineMode::Alarm))
             return "Wait for the machine to be idle";
-        if (!st.havePos) return "No position from the plotter yet";
         return nullptr;
+    }
+
+    void setPhase(Phase p)
+    {
+        plot.phase = p;
+        plot.phaseAt = millis();
     }
 
     void startPlot(float sizeMm)
     {
-        const FluidNCStatus &st = fluidNC.status();
         plot = Plot();
         plot.active = true;
-        plot.cx = st.wposX;
-        plot.cy = st.wposY;
+        plot.cx = plot.cy = MARGIN_MM + sizeMm / 2.0f;
         // Sized by the drawing itself, not the preview's frame: "100mm" is
         // the pattern's own width.
         plot.scale = (sizeMm / 2.0f) / curve.reach;
         plot.total = HEAD_LINES + curve.copies * copyBlock() + 1;
-        plot.startedAt = millis();
+
+        // Lift first: homing drags the carriage the length of both axes, and
+        // a pen left down draws a line across the bed on the way. Skipped
+        // when alarmed -- an alarmed machine rejects motion, and home()
+        // unlocks before it homes.
+        bool alarmed = fluidNC.status().mode == MachineMode::Alarm;
+        plot.liftTicket = alarmed ? 0 : uiPenLift();
+        if (!alarmed && !plot.liftTicket)
+        {
+            plot.active = false;
+            setResult(Config::get().penUpCmd[0] ? "Couldn't lift the pen" : "No pen-up command");
+            return;
+        }
+        setPhase(Phase::Lift);
+    }
+
+    // Lift, then home: true once the machine is homed and ready to draw.
+    bool prepare(const FluidNCStatus &st)
+    {
+        uint32_t elapsed = millis() - plot.phaseAt;
+        switch (plot.phase)
+        {
+            case Phase::Lift:
+                if (plot.liftTicket)
+                {
+                    FluidNCClient::AckState ack = fluidNC.ackState(plot.liftTicket);
+                    if (ack == FluidNCClient::AckState::Error) { stopPlot("Pen-up command rejected"); return false; }
+                    if (ack == FluidNCClient::AckState::Lost) { stopPlot("Pen lift lost"); return false; }
+                    if (ack == FluidNCClient::AckState::Pending)
+                    {
+                        if (elapsed >= LIFT_TIMEOUT_MS) stopPlot("No reply to pen lift");
+                        return false;
+                    }
+                }
+                if (elapsed >= LIFT_SETTLE_MS && (st.mode == MachineMode::Idle || st.mode == MachineMode::Alarm))
+                {
+                    fluidNC.home();
+                    setPhase(Phase::AwaitHoming);
+                }
+                else if (elapsed >= LIFT_TIMEOUT_MS) stopPlot("Machine didn't settle");
+                return false;
+
+            case Phase::AwaitHoming:
+                if (st.mode == MachineMode::Homing) setPhase(Phase::AwaitHomed);
+                else if (elapsed >= HOMING_START_TIMEOUT_MS) stopPlot("Homing didn't start");
+                return false;
+
+            case Phase::AwaitHomed:
+                if (st.mode == MachineMode::Alarm) stopPlot("Homing failed");
+                else if (st.mode == MachineMode::Idle || st.mode == MachineMode::Done)
+                {
+                    setPhase(Phase::Stream);
+                    plot.startedAt = millis(); // only failures from here on are the plot's
+                    return true;
+                }
+                else if (elapsed >= HOMING_DONE_TIMEOUT_MS) stopPlot("Homing timed out");
+                return false;
+
+            case Phase::Stream:
+                return true;
+        }
+        return false;
     }
 
     void pumpPlot()
     {
         if (!plot.active) return;
         const FluidNCStatus &st = fluidNC.status();
+
+        if (!st.connected) { stopPlot("Stopped: connection lost"); return; }
+        if (!prepare(st)) return;
 
         if (st.mode == MachineMode::Alarm) { stopPlot("Stopped: machine alarmed"); return; }
         if (!st.connected) { stopPlot("Stopped: connection lost"); return; }
@@ -632,7 +721,7 @@ namespace
     {
         if (plot.active) return;
         const char *why = notReadyReason();
-        lv_label_set_text(confirmNote, why ? why : "Centred where the pen is now.\nPen up/down: your Settings commands.");
+        lv_label_set_text(confirmNote, why ? why : "Lifts the pen and homes, then draws 25mm in from home.");
         lv_obj_set_style_text_color(confirmNote, why ? Palette::accent() : Palette::textMuted(), 0);
         refreshSizeChips();
         lv_obj_clear_flag(confirmBox, LV_OBJ_FLAG_HIDDEN);
@@ -758,7 +847,12 @@ namespace
         if (!busy) return;
 
         char buf[56];
-        if (plot.active)
+        if (plot.active && plot.phase != Phase::Stream)
+        {
+            snprintf(buf, sizeof(buf), "%s", plot.phase == Phase::Lift ? "Lifting pen..." : "Homing...");
+            lv_bar_set_value(plotBar, 0, LV_ANIM_OFF);
+        }
+        else if (plot.active)
         {
             int pct = plot.total ? plot.next * 100 / plot.total : 0;
             snprintf(buf, sizeof(buf), "Plotting  %d%%", pct);
@@ -895,4 +989,64 @@ void uiSpiroUpdate()
     if (!screen || lv_scr_act() != screen || millis() - lastUi < 150) return;
     lastUi = millis();
     refreshPlotUi();
+}
+
+namespace SpiroTour
+{
+    namespace
+    {
+        Param saved[P_COUNT];
+        bool savedOutside = false;
+        float savedPhase = 0;
+        int savedSelected = P_GEAR;
+
+        // Ring 96 / gear 32 closes after one trip: three petals, a short
+        // plot, quick enough to watch to the end inside the tour.
+        void setFlower()
+        {
+            params[P_RING].value = 96;
+            params[P_GEAR].value = 32;
+            params[P_PEN].value = 80;
+            params[P_COPIES].value = 1;
+            outside = false;
+            phase = 0;
+        }
+    }
+
+    void begin()
+    {
+        memcpy(saved, params, sizeof(saved));
+        savedOutside = outside;
+        savedPhase = phase;
+        savedSelected = selected;
+        setFlower();
+        selected = P_GEAR;
+        if (screen) { refreshChips(); restartPreview(); }
+    }
+
+    void toggleOutside() { modeCb(nullptr); }
+
+    void selectCopies()
+    {
+        selected = P_COPIES;
+        if (screen) { refreshChips(); toastParam(P_COPIES); }
+    }
+
+    void plotFlower()
+    {
+        if (plot.active) return;
+        setFlower();
+        if (screen) { refreshChips(); restartPreview(); }
+        if (!notReadyReason()) startPlot(100.0f);
+    }
+
+    void end()
+    {
+        memcpy(params, saved, sizeof(saved));
+        outside = savedOutside;
+        phase = savedPhase;
+        selected = savedSelected;
+        if (screen) refreshChips();
+        if (screen && !plot.active) restartPreview();
+    }
 }

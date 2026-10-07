@@ -64,6 +64,14 @@ namespace
         return false;
     }
 
+    // A line that moves an axis: has an X, Y or Z word and isn't a $ command.
+    bool isMoveLine(const char *text)
+    {
+        if (text[0] == '$') return false;
+        float v;
+        return word(text, 'X', v) || word(text, 'Y', v) || word(text, 'Z', v);
+    }
+
     bool hasToken(const char *text, const char *token)
     {
         size_t n = strlen(token);
@@ -92,6 +100,45 @@ void MachineSim::reset()
     jobElapsedMs_ = 0;
     lastTickMs_ = lastReportMs_ = millis();
     deleted_ = 0;
+    modalFeed_ = DEFAULT_FEED_MM_MIN;
+    clearQueues();
+}
+
+void MachineSim::clearQueues()
+{
+    planHead_ = planCount_ = 0;
+    inHead_ = inCount_ = 0;
+}
+
+void MachineSim::answer(const char *text, LineSink sink, void *ctx)
+{
+    say(sink, ctx, lineCommand(text, sink, ctx) ? "ok" : (state_ == State::Alarm ? "error:9" : "error:8"));
+}
+
+// Answers waiting lines in order, for as long as the planner has room for
+// the next one.
+void MachineSim::pumpInbox(LineSink sink, void *ctx)
+{
+    while (inCount_ > 0)
+    {
+        const char *front = inbox_[inHead_];
+        if (isMoveLine(front) && planCount_ >= PLAN_DEPTH) return;
+        answer(front, sink, ctx);
+        inHead_ = (inHead_ + 1) % INBOX_DEPTH;
+        inCount_--;
+    }
+}
+
+// Starts the next queued move, if there is one.
+bool MachineSim::nextPlannedMove()
+{
+    if (planCount_ == 0) return false;
+    const Move &m = plan_[planHead_];
+    startMove(m.target, m.feed);
+    planHead_ = (planHead_ + 1) % PLAN_DEPTH;
+    planCount_--;
+    state_ = State::Run;
+    return true;
 }
 
 void MachineSim::say(LineSink sink, void *ctx, const char *text)
@@ -138,7 +185,22 @@ void MachineSim::command(bool raw, const char *text, LineSink sink, void *ctx)
 {
     if (!raw)
     {
-        say(sink, ctx, lineCommand(text, sink, ctx) ? "ok" : (state_ == State::Alarm ? "error:9" : "error:8"));
+        // Behind lines already waiting, or a move with the planner full:
+        // wait, unanswered, like a line in FluidNC's receive buffer.
+        if (inCount_ > 0 || (isMoveLine(text) && planCount_ >= PLAN_DEPTH))
+        {
+            if (inCount_ >= INBOX_DEPTH)
+            {
+                say(sink, ctx, "error:8"); // a sender ignoring the oks: refuse rather than lose order
+                return;
+            }
+            int slot = (inHead_ + inCount_) % INBOX_DEPTH;
+            strncpy(inbox_[slot], text, INBOX_LINE - 1);
+            inbox_[slot][INBOX_LINE - 1] = '\0';
+            inCount_++;
+            return;
+        }
+        answer(text, sink, ctx);
         return;
     }
 
@@ -168,6 +230,7 @@ void MachineSim::command(bool raw, const char *text, LineSink sink, void *ctx)
 
         case 0x18: // soft reset
         {
+            clearQueues(); // FluidNC drops everything buffered on a reset
             bool inMotion = state_ == State::Run || state_ == State::Jog || state_ == State::Home ||
                             (state_ == State::Hold && millis() - holdStartedMs_ < HOLD_DECEL_MS);
             moving_ = false;
@@ -272,7 +335,10 @@ bool MachineSim::lineCommand(const char *text, LineSink sink, void *ctx)
         return true;
     }
 
-    if (state_ != State::Idle) return false;
+    // Idle, or already working through streamed moves (not an SD job, and
+    // not a jog or homing cycle): a move joins the queue.
+    bool streaming = (state_ == State::Run && !jobPath_[0]) || (state_ == State::Hold && heldFrom_ == State::Run && !jobPath_[0]);
+    if (state_ != State::Idle && !streaming) return false;
     gcodeMove(text);
     return true;
 }
@@ -296,10 +362,22 @@ void MachineSim::gcodeMove(const char *text)
     }
     if (!any) return; // modal-only line (G90, M5 ...): nothing moves
 
-    float feed = hasToken(text, "G0") ? RAPID_MM_MIN : DEFAULT_FEED_MM_MIN;
-    if (!hasToken(text, "G0")) word(text, 'F', feed);
-    startMove(target, feed);
-    state_ = State::Run; // FluidNC reports Run for any motion that isn't a jog
+    float f;
+    if (word(text, 'F', f) && f > 0) modalFeed_ = f;
+    float feed = hasToken(text, "G0") ? RAPID_MM_MIN : modalFeed_;
+
+    // Queued behind whatever's already moving; straight off if nothing is.
+    // Targets chain: a queued move starts from the previous one's end,
+    // which is mpos_ by the time it runs.
+    if (planCount_ < PLAN_DEPTH)
+    {
+        Move &m = plan_[(planHead_ + planCount_) % PLAN_DEPTH];
+        memcpy(m.target, target, sizeof(m.target));
+        m.feed = feed;
+        planCount_++;
+    }
+    if (!moving_ && state_ != State::Hold) nextPlannedMove();
+    else if (state_ == State::Idle) state_ = State::Run; // FluidNC reports Run for any motion that isn't a jog
 }
 
 void MachineSim::deleteFile(const char *path)
@@ -318,6 +396,9 @@ void MachineSim::tick(LineSink sink, void *ctx)
     uint32_t dt = now - lastTickMs_;
     if (dt > 200) dt = 200; // a stalled task shouldn't teleport the head
     lastTickMs_ = now;
+
+    pumpInbox(sink, ctx);
+    if (!moving_ && planCount_ > 0 && state_ != State::Hold && state_ != State::Alarm) nextPlannedMove();
 
     if (state_ == State::Run && jobPath_[0])
     {
@@ -407,7 +488,9 @@ void MachineSim::tick(LineSink sink, void *ctx)
         {
             memcpy(mpos_, target_, sizeof(mpos_));
             moving_ = false;
-            if (state_ == State::Jog || state_ == State::Run || state_ == State::Home) state_ = State::Idle;
+            if (!nextPlannedMove() &&
+                (state_ == State::Jog || state_ == State::Run || state_ == State::Home))
+                state_ = State::Idle;
         }
         else
         {

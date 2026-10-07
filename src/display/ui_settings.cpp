@@ -942,6 +942,35 @@ namespace
         Demo::set(lv_obj_has_state(sw, LV_STATE_CHECKED));
     }
 
+    // The spirograph lives at the top of Jobs by default. Switched out of
+    // there, this is where it lives instead: an Open button appears here,
+    // above Demo mode.
+    lv_obj_t *spiroOpenBtn = nullptr;
+
+    void spiroJobsCb(lv_event_t *e)
+    {
+        bool inJobs = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
+        Config::get().spiroInJobs = inJobs;
+        Config::save();
+        if (inJobs) lv_obj_add_flag(spiroOpenBtn, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(spiroOpenBtn, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void openSpiroCb(lv_event_t *) { UiNav::goSpiro(); }
+
+    void addSpiroControls(lv_obj_t *card)
+    {
+        lv_obj_t *row = uiMakeRow(card, "Spirograph in Jobs");
+        lv_obj_t *sw = uiMakeSwitch(row, Config::get().spiroInJobs);
+        lv_obj_add_event_cb(sw, spiroJobsCb, LV_EVENT_VALUE_CHANGED, NULL);
+
+        lv_obj_t *lbl;
+        spiroOpenBtn = uiMakeButton(card, LUCIDE_DRAFTING_COMPASS " Spirograph", &lbl);
+        lv_obj_set_style_text_font(lbl, &UI_ICONS_12, 0); // icon + word
+        lv_obj_add_event_cb(spiroOpenBtn, openSpiroCb, LV_EVENT_CLICKED, NULL);
+        if (Config::get().spiroInJobs) lv_obj_add_flag(spiroOpenBtn, LV_OBJ_FLAG_HIDDEN);
+    }
+
     // Demo mode (net/demo_mode.h): a simulated plotter and lights, so the
     // panel can be shown working with no machine around. Here rather than
     // on a main screen because it's a thing you set up once for a showing,
@@ -1041,6 +1070,7 @@ namespace
         lv_obj_set_style_text_color(aboutUptimeLbl, Palette::textMuted(), 0);
 
         addUpdateControls(card);
+        addSpiroControls(card);
         addDemoControls(card);
 
         return card;

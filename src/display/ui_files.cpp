@@ -7,6 +7,7 @@
 #include "ui_screen_shell.h"
 #include "ui_widgets.h"
 #include "ui_nav.h"
+#include "../config/settings.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -62,6 +63,23 @@ namespace
     char curDir[SD_DIR_MAX] = "";
     char selectedPath[PATH_BUF] = {0};
 
+    // The spirograph (ui_spiro.h) rides along as the first entry at the SD
+    // root, unless it's been moved out to Settings > About. Ring index i is
+    // then file i - spiroSlots(); every place that turns a ring index into
+    // a file goes through fileAt() so the two can't drift.
+    int spiroSlots() { return (!curDir[0] && Config::get().spiroInJobs) ? 1 : 0; }
+    bool isSpiro(int index) { return index < spiroSlots(); }
+    bool fileAt(int index, FluidNCFileEntry &out) { return fluidNC.fileListEntry(index - spiroSlots(), out); }
+
+    // Files in the list we have, if it's for the folder we're in -- a list
+    // for a folder since left counts as nothing yet.
+    int filesHere()
+    {
+        char dir[SD_DIR_MAX];
+        fluidNC.fileListDir(dir, sizeof(dir));
+        return strcmp(dir, curDir) == 0 ? fluidNC.fileListCount() : 0;
+    }
+
     // dir + "/" + name, or just name at the root. False if it won't fit.
     bool joinPath(char *out, size_t outSize, const char *dir, const char *name)
     {
@@ -100,8 +118,15 @@ namespace
 
     void refreshHub(int index)
     {
+        if (isSpiro(index))
+        {
+            lv_label_set_text(hubNameLbl, "Spirograph");
+            lv_label_set_text(hubMetaLbl, "Make a drawing");
+            lv_label_set_text(hubActionLbl, LUCIDE_DRAFTING_COMPASS " Open");
+            return;
+        }
         FluidNCFileEntry entry;
-        if (!fluidNC.fileListEntry(index, entry))
+        if (!fileAt(index, entry))
         {
             showEmptyHub();
             return;
@@ -135,8 +160,10 @@ namespace
         curDir[sizeof(curDir) - 1] = '\0';
         // Clear the old folder's entries straight away, so nothing on
         // screen can be opened against a list that's about to be replaced.
-        ring.setCount(0);
-        showLoadingHub();
+        // (The spirograph needs no list, so at the root it stays.)
+        ring.setCount(spiroSlots());
+        if (spiroSlots()) refreshHub(0);
+        else showLoadingHub();
         fluidNC.requestFileList(curDir);
     }
 
@@ -242,14 +269,19 @@ namespace
     {
         lv_obj_t *icon = lv_obj_get_child(chip, 0);
         if (!icon) return;
+        if (isSpiro(index))
+        {
+            lv_label_set_text(icon, LUCIDE_DRAFTING_COMPASS);
+            return;
+        }
         FluidNCFileEntry entry;
-        bool isDir = fluidNC.fileListEntry(index, entry) && entry.isDir;
+        bool isDir = fileAt(index, entry) && entry.isDir;
         lv_label_set_text(icon, isDir ? LUCIDE_FOLDER : LUCIDE_FILE);
     }
 
     void rebuildList()
     {
-        int count = fluidNC.fileListCount();
+        int count = filesHere() + spiroSlots();
         ring.setCount(count);
         if (count == 0) showEmptyHub();
         else refreshHub(ring.selectedIndex());
@@ -257,8 +289,13 @@ namespace
 
     void onCardOpen(int index)
     {
+        if (isSpiro(index))
+        {
+            UiNav::goSpiro();
+            return;
+        }
         FluidNCFileEntry entry;
-        if (!fluidNC.fileListEntry(index, entry)) return;
+        if (!fileAt(index, entry)) return;
         char path[PATH_BUF];
         if (!joinPath(path, sizeof(path), curDir, entry.name)) return;
         if (entry.isDir) openFolder(path);
@@ -352,11 +389,16 @@ void uiFilesSetFocused(bool focused)
     // Refreshes whichever folder you were last in, rather than dropping
     // you back at the root every time you look away.
     if (!focused) return;
+    // Straight away from what's already here, so the spirograph entry
+    // follows its setting even while the plotter is out of reach.
+    rebuildList();
     fluidNC.requestFileList(curDir);
     // The fetch waits for a connection; until then, say why nothing's
     // coming rather than show "Loading..." indefinitely.
     if (!fluidNC.status().connected && ring.count() == 0) showHubMessage("Offline", "Can't reach plotter");
 }
+
+int uiFilesSpiroSlots() { return spiroSlots(); }
 
 bool uiFilesHandleBack()
 {
@@ -377,8 +419,9 @@ void uiFilesHandleSelect()
 
 void uiFilesHandleDoubleClick()
 {
+    if (isSpiro(ring.selectedIndex())) return; // nothing to run or delete
     FluidNCFileEntry entry;
-    if (!fluidNC.fileListEntry(ring.selectedIndex(), entry)) return;
+    if (!fileAt(ring.selectedIndex(), entry)) return;
     if (entry.isDir) return; // a folder has no Run/Delete
     openConfirmFor(entry);
 }
