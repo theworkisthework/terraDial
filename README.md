@@ -127,6 +127,44 @@ Its USB-C port reaches one chip or the other depending on which way round
 the plug goes in: if a flash finds an ESP32 rather than an ESP32-S3, flip
 the plug.
 
+#### The Knob's second chip
+
+The Knob has two microcontrollers. terraDial runs on the ESP32-S3; the other,
+an ESP32, ships running Waveshare's factory firmware — a Bluetooth speaker
+and Bluetooth knob, with its radio on and discoverable (as `TAIJI_KNOB…`) for
+as long as the board has power. terraDial doesn't use it, and on battery it's
+a steady drain.
+
+`src/coproc/sleep.cpp` replaces that with a program that puts the chip into
+deep sleep at power-on and leaves it there (a few µA). It's flashed once, and
+the terraDial firmware on the S3 is unaffected:
+
+1. Plug in with the USB-C plug turned so the port reaches the **ESP32** — it
+   shows up as a USB-serial (CH340-style) port, not the S3's "USB Serial
+   Device". If unsure, try a flash: it says which chip it found.
+2. Optionally, back up what's there first (4MB, about a minute):
+   ```bash
+   python ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32 --port COM9 -b 460800 read_flash 0 0x400000 knob-esp32-backup.bin
+   ```
+3. Flash it:
+   ```bash
+   pio run -e waveshare-knob-1_8-coproc-sleep -t upload --upload-port COM9
+   ```
+4. Turn the plug back over for terraDial. The `TAIJI_KNOB` Bluetooth device
+   is gone.
+
+(Use your own port names: `pio device list` shows them.)
+
+**To put Waveshare's firmware back**, write either your backup or the factory
+image from Waveshare's
+[BIN download](https://files.waveshare.com/wiki/ESP32-S3-Knob-Touch-LCD-1.8/ESP32-S3-Knob-Touch-LCD-1.8-BIN.zip)
+(`ESP32-KNOB_ESP32_0.bin`, a whole-flash image) back at address 0, with the
+plug on the ESP32 side:
+
+```bash
+python ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32 --port COM9 -b 460800 write_flash 0x0 ESP32-KNOB_ESP32_0.bin
+```
+
 ### Power
 
 It's a **USB-powered device** — a single USB-A lead carries both power and,
@@ -280,6 +318,7 @@ don't change.
 |---|---|---|
 | `crowpanel-1_28-rotary` | Elecrow CrowPanel 1.28" Rotary | The original. 240×240. |
 | `waveshare-knob-1_8` | Waveshare ESP32-S3-Knob-Touch-LCD-1.8 | 360×360, drawn natively (see below). The knob doesn't click, so tap where you'd have clicked; every screen has touch controls and a back button. No LEDs, so the status ring is drawn round the screen's edge. Adds haptic detents and a battery gauge on the home hub. |
+| `waveshare-knob-1_8-coproc-sleep` | The Knob's second chip (ESP32) | Not terraDial: puts that chip to sleep for good. See [The Knob's second chip](#the-knobs-second-chip). |
 
 Every screen is designed on a 240px grid and drawn at the panel's own
 resolution: pixel values go through `px()` and fonts through `UI_FONT_<n>` /
@@ -366,6 +405,7 @@ src/
   net/           FluidNC WebSocket client, terraPixel HTTP client, Wi-Fi,
                  OTA, and the demo-mode machine simulator
   power/         battery gauge
+  coproc/        the Waveshare Knob's second chip: deep sleep, nothing else
 tools/           icon, logo and screen-illustration generation
 web/             the browser-based firmware installer (published to Pages)
 design_handoff_radial_dial_ui/   the original design brief (historical)
