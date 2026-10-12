@@ -301,11 +301,20 @@ uint16_t FluidNCClient::probeWsPort()
     return 0;
 }
 
+// The socket asks for an independent session. FluidNC 4.0.4+ files every
+// websocket under a session -- the browser's sessionId cookie -- and when a
+// new one connects it closes any older socket in the same session ("the
+// newest websocket for a session wins", WSChannel.cpp). A client with no
+// cookie, which is this one and terraForge, gets the empty session, so each
+// one's connect closed the other's: two sockets taking turns kicking each
+// other off every few seconds for as long as both were running.
+// ?independent_session makes the session this socket's own IP:port instead.
+// FluidNC 3.x's separate socket server ignores the query.
 void FluidNCClient::openSocket()
 {
-    Serial.printf("[fluidnc] %s -> ws://%s:%u/%s\n", Config::get().fluidNcHost,
+    Serial.printf("[fluidnc] %s -> ws://%s:%u/?independent_session=1%s\n", Config::get().fluidNcHost,
                   resolvedIp_.toString().c_str(), wsPort_, wsPortGuessed_ ? " (port guessed)" : "");
-    wsClient.begin(resolvedIp_.toString().c_str(), wsPort_, "/");
+    wsClient.begin(resolvedIp_.toString().c_str(), wsPort_, "/?independent_session=1");
     wsClient.onEvent(wsEventTrampoline);
     wsClient.setReconnectInterval(3000);
     wsBeganAt_ = millis();
