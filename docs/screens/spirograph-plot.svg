@@ -33,8 +33,9 @@
 <text x="120" y="90" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#e0e0e0" text-anchor="middle" dominant-baseline="central">100 mm</text>
 <rect x="151" y="79" width="50" height="22" rx="11" fill="#0f3460"/>
 <text x="176" y="90" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#e0e0e0" text-anchor="middle" dominant-baseline="central">150 mm</text>
-<text x="120" y="122" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9ca3af" text-anchor="middle" dominant-baseline="central">Lifts the pen and homes,</text>
-<text x="120" y="137" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9ca3af" text-anchor="middle" dominant-baseline="central">then draws 25mm in from home.</text>
+<text x="120" y="114" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9ca3af" text-anchor="middle" dominant-baseline="central">Lifts the pen and homes,</text>
+<text x="120" y="128" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9ca3af" text-anchor="middle" dominant-baseline="central">draws 25mm in from home,</text>
+<text x="120" y="142" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#9ca3af" text-anchor="middle" dominant-baseline="central">then homes again.</text>
 <rect x="40" y="154" width="76" height="32" rx="16" fill="#0f3460"/>
 <text x="78" y="170" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#e0e0e0" text-anchor="middle" dominant-baseline="central">Cancel</text>
 <rect x="124" y="154" width="76" height="32" rx="16" fill="#e94560"/>

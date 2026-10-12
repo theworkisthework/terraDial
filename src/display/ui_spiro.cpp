@@ -7,6 +7,7 @@
 #include "../config/settings.h"
 #include "../net/fluidnc_client.h"
 #include "ui_pen.h"
+#include "machine_extents.h"
 #include <esp_heap_caps.h>
 #include <math.h>
 #include <stdio.h>
@@ -166,6 +167,11 @@ namespace
     // both axes: a 100mm drawing is centred at X75 Y75. The lift-then-home
     // sequence is the Park macro's (ui_park.cpp), for the same reasons --
     // see there.
+    //
+    // And after it: once the last line has been drawn (the final pen up
+    // among them), the machine homes again and then runs out along Y to
+    // MARGIN_MM past the top of the drawing -- the gantry is off the paper,
+    // and the next plot starts from home anyway.
 
     const float MARGIN_MM = 25.0f;
     const float FEED_MM_MIN = 2000.0f;
@@ -174,7 +180,8 @@ namespace
     const int HEAD_LINES = 2;
     const int COPY_LEAD = 3;
 
-    enum class Phase : uint8_t { Lift, AwaitHoming, AwaitHomed, Stream };
+    enum class Phase : uint8_t { Lift, AwaitHoming, AwaitHomed, Stream,
+                                 AwaitDrawn, AwaitRehoming, AwaitRehomed };
     const uint32_t LIFT_SETTLE_MS = 500;
     const uint32_t LIFT_TIMEOUT_MS = 8000;
     const uint32_t HOMING_START_TIMEOUT_MS = 10000;
@@ -187,6 +194,7 @@ namespace
         uint32_t phaseAt = 0;
         uint32_t liftTicket = 0;
         float cx = 0, cy = 0, scale = 1; // mm per tooth
+        float clearY = 0; // where the gantry goes once it's done
         int next = 0;   // next line to send
         int total = 0;  // lines in the whole plot
         uint32_t ticket = 0;
@@ -284,6 +292,7 @@ namespace
         plot = Plot();
         plot.active = true;
         plot.cx = plot.cy = MARGIN_MM + sizeMm / 2.0f;
+        plot.clearY = fminf(plot.cy + sizeMm / 2.0f + MARGIN_MM, MACHINE_Y_MAX_MM);
         // Sized by the drawing itself, not the preview's frame: "100mm" is
         // the pattern's own width.
         plot.scale = (sizeMm / 2.0f) / curve.reach;
@@ -348,8 +357,55 @@ namespace
 
             case Phase::Stream:
                 return true;
+
+            default: // finishing: see finish()
+                return false;
         }
         return false;
+    }
+
+    // Everything's been sent: wait for it to be drawn, home, then move the
+    // gantry clear of the drawing. The last "ok" only means the planner took
+    // the last line, not that the pen has got there, so Idle is what says
+    // it's drawn -- given a moment first, since the status stream can be a
+    // report behind and still say Idle from before the plot was moving.
+    void finish(const FluidNCStatus &st)
+    {
+        uint32_t elapsed = millis() - plot.phaseAt;
+        bool idle = st.mode == MachineMode::Idle || st.mode == MachineMode::Done;
+        switch (plot.phase)
+        {
+            case Phase::AwaitDrawn:
+                if (st.mode == MachineMode::Alarm) stopPlot("Stopped: machine alarmed");
+                else if (elapsed >= LIFT_SETTLE_MS && idle)
+                {
+                    fluidNC.home();
+                    setPhase(Phase::AwaitRehoming);
+                }
+                return;
+
+            case Phase::AwaitRehoming:
+                if (st.mode == MachineMode::Homing) setPhase(Phase::AwaitRehomed);
+                else if (elapsed >= HOMING_START_TIMEOUT_MS) stopPlot("Drawn, but homing didn't start");
+                return;
+
+            case Phase::AwaitRehomed:
+                if (st.mode == MachineMode::Alarm) stopPlot("Drawn, but homing failed");
+                else if (idle)
+                {
+                    // G90 stated, as Park does: G53 needs absolute mode.
+                    char cmd[40];
+                    snprintf(cmd, sizeof(cmd), "G90 G53 G0 Y%.3f", plot.clearY);
+                    fluidNC.sendGcodeLine(cmd);
+                    plot.active = false;
+                    setResult("Done");
+                }
+                else if (elapsed >= HOMING_DONE_TIMEOUT_MS) stopPlot("Drawn, but homing timed out");
+                return;
+
+            default:
+                return;
+        }
     }
 
     void pumpPlot()
@@ -358,6 +414,7 @@ namespace
         const FluidNCStatus &st = fluidNC.status();
 
         if (!st.connected) { stopPlot("Stopped: connection lost"); return; }
+        if (plot.phase > Phase::Stream) { finish(st); return; }
         if (!prepare(st)) return;
 
         if (st.mode == MachineMode::Alarm) { stopPlot("Stopped: machine alarmed"); return; }
@@ -387,8 +444,7 @@ namespace
 
         if (plot.next >= plot.total)
         {
-            plot.active = false;
-            setResult("Done");
+            setPhase(Phase::AwaitDrawn);
             return;
         }
 
@@ -721,7 +777,7 @@ namespace
     {
         if (plot.active) return;
         const char *why = notReadyReason();
-        lv_label_set_text(confirmNote, why ? why : "Lifts the pen and homes, then draws 25mm in from home.");
+        lv_label_set_text(confirmNote, why ? why : "Lifts the pen and homes, draws 25mm in from home, then homes again.");
         lv_obj_set_style_text_color(confirmNote, why ? Palette::accent() : Palette::textMuted(), 0);
         refreshSizeChips();
         lv_obj_clear_flag(confirmBox, LV_OBJ_FLAG_HIDDEN);
@@ -847,7 +903,12 @@ namespace
         if (!busy) return;
 
         char buf[56];
-        if (plot.active && plot.phase != Phase::Stream)
+        if (plot.active && plot.phase > Phase::Stream)
+        {
+            snprintf(buf, sizeof(buf), "%s", plot.phase == Phase::AwaitDrawn ? "Finishing..." : "Homing...");
+            lv_bar_set_value(plotBar, 1000, LV_ANIM_OFF);
+        }
+        else if (plot.active && plot.phase != Phase::Stream)
         {
             snprintf(buf, sizeof(buf), "%s", plot.phase == Phase::Lift ? "Lifting pen..." : "Homing...");
             lv_bar_set_value(plotBar, 0, LV_ANIM_OFF);
