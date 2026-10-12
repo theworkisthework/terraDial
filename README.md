@@ -447,9 +447,12 @@ Some notes worth knowing before changing things:
   actually an alarm and holds the `$H` until that has landed. For the same
   reason jogging is refused mid-homing — the jog-cancel realtime byte would
   stop the cycle, and FluidNC alarms on a homing cycle that didn't finish.
-- Project links live in [`include/branding.h`](include/branding.h). The
-  Discord URL is deliberately empty until there's a real invite — an entry
-  with no URL is skipped rather than rendered as a QR that goes nowhere.
+- Project links live in [`include/branding.h`](include/branding.h). An
+  entry with no URL is skipped rather than rendered as a QR that goes nowhere.
+  The QR codes are drawn by [`fancy_qr.cpp`](src/display/fancy_qr.cpp), not
+  LVGL's `lv_qrcode`: palette colours, rounded corner eyes, and a tap opens a
+  full-screen one at the highest error correction, with the terraPen mark
+  drawing itself into the middle.
   `githubOwner()`/`githubRepo()` there are also what the updater queries, so
   a repo rename means editing them. The old **terraTouch** name still
   resolves, but only as a 301, and GitHub's API answers a redirect with a
