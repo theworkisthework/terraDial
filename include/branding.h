@@ -23,6 +23,9 @@ namespace Branding
     inline const char *mdnsAddress() { return "terradial.local"; }
 
     inline const char *siteUrl() { return "https://terrapen.xyz"; }
+    // The terraPen user docs (terraPenDocumentation), published to GitHub
+    // Pages by that repo's publish workflow.
+    inline const char *docsUrl() { return "https://theworkisthework.github.io/terraPenDocumentation/"; }
     // Owner/repo split out because the updater needs them separately for
     // GitHub's releases API, and one source of truth beats a URL and an API
     // path drifting apart.

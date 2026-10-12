@@ -46,7 +46,8 @@ also drive).
   working with no machine around, and a self-running tour of them
 - On the **Waveshare Knob**: a haptic tick per knob detent and a battery gauge
 - **About screen** carrying the project identity and QR links to the site,
-  source and Discord — a 240px dial is no place to read a URL
+  the terraPen documentation, source and Discord — a 240px dial is no place to
+  read a URL
 
 ## Screens
 

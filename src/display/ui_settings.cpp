@@ -1053,6 +1053,7 @@ namespace
         lv_obj_set_style_text_color(versionLbl, Palette::textMuted(), 0);
 
         addLinkQr(card, "terrapen.xyz", Branding::siteUrl());
+        addLinkQr(card, "Documentation", Branding::docsUrl());
         addLinkQr(card, "Source on GitHub", Branding::githubUrl());
         addLinkQr(card, "Discord", Branding::discordUrl());
 
