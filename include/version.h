@@ -13,9 +13,16 @@
 #define FIRMWARE_VERSION "dev"
 #endif
 
+// What a person is shown: the version for a release, and for a dev build
+// where it was built from ("0.1.4+28 (d28dfa0)") -- see tools/version.py.
+#ifndef FIRMWARE_LABEL
+#define FIRMWARE_LABEL FIRMWARE_VERSION
+#endif
+
 namespace Version
 {
     inline const char *firmware() { return FIRMWARE_VERSION; }
+    inline const char *label() { return FIRMWARE_LABEL; }
 
     // True for a build that didn't come from a tag. Version comparison is
     // meaningless for these.

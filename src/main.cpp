@@ -293,7 +293,7 @@ void setup()
 {
     Serial.begin(115200);
     delay(300); // give the USB-CDC serial monitor time to attach before the first prints
-    Serial.printf("terraDial boot -- firmware %s on %s\n", Version::firmware(), BOARD_NAME);
+    Serial.printf("terraDial boot -- firmware %s on %s\n", Version::label(), BOARD_NAME);
 
     Config::begin();
 
