@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch the latest release's factory image
+      - name: Fetch the latest release's factory images
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -63,21 +63,43 @@ jobs:
           # Downloaded and served from our own origin rather than linked to
           # github.com: Web Serial installs fetch the image with JS, and a
           # cross-origin fetch the browser declines fails quietly.
-          gh release download "$TAG" -p terradial-factory.bin -D site
+          #
+          # One manifest per board. Both are ESP32-S3s, so esp-web-tools
+          # can't tell them apart by chip family -- the page offers a button
+          # for each, and each button names its own manifest.
 
-          cat > site/manifest.json <<EOF
+          # manifest <file> <board name> <factory image>
+          # The board name goes into a JSON string, so a " in it (as in
+          # 1.28") has to arrive already escaped.
+          manifest() {
+            cat > "site/$1" <<EOF
           {
-            "name": "terraDial",
+            "name": "terraDial for the $2",
             "version": "$VERSION",
             "new_install_prompt_erase": true,
             "builds": [
               {
                 "chipFamily": "ESP32-S3",
-                "parts": [{ "path": "terradial-factory.bin", "offset": 0 }]
+                "parts": [{ "path": "$3", "offset": 0 }]
               }
             ]
           }
           EOF
+          }
+
+          # The CrowPanel keeps the unsuffixed names it has always had.
+          gh release download "$TAG" -p terradial-factory.bin -D site
+          manifest manifest.json 'CrowPanel 1.28\"' terradial-factory.bin
+
+          # Releases before the Knob was added (v0.1.4 and earlier) have no
+          # Knob image. Publish the page without it rather than failing --
+          # the page sees no manifest-knob18.json and says it isn't
+          # available yet.
+          if gh release download "$TAG" -p terradial-knob18-factory.bin -D site; then
+            manifest manifest-knob18.json 'Waveshare Knob 1.8\"' terradial-knob18-factory.bin
+          else
+            echo "No Knob image in $TAG; publishing the CrowPanel only"
+          fi
 
           ls -l site
 

@@ -198,7 +198,10 @@ running it.
 <https://theworkisthework.github.io/terraDial/>
 
 Plug the panel into a computer with a USB-A **data** cable, open that page in
-Chrome or Edge on the desktop, and click *Connect and install*. It talks to the
+Chrome or Edge on the desktop, and click the install button for **your**
+board — the CrowPanel and the Knob each have their own. Both are ESP32-S3s, so
+the installer can't tell them apart and will happily write the wrong board's
+firmware. It talks to the
 panel over Web Serial and writes the whole chip — bootloader, partition table
 and app — so it also works on a board that has never been flashed, and on one
 that has been flashed with something broken.
@@ -244,13 +247,16 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-That builds the firmware with the tag stamped in, attaches two images to the
-GitHub Release, and redeploys the installer page:
+That builds the firmware for both boards with the tag stamped in, attaches two
+images per board to the GitHub Release, and redeploys the installer page:
 
-| Asset | What it is |
-|---|---|
-| `terradial-ota.bin` | The app image. What the panel downloads for itself — the name is fixed, and `OTA_ASSET_NAME` in [`src/net/ota_updater.h`](src/net/ota_updater.h) has to keep matching it |
-| `terradial-factory.bin` | Bootloader + partitions + app, merged for flashing at `0x0`. What the web installer writes |
+| CrowPanel | Waveshare Knob | What it is |
+|---|---|---|
+| `terradial-ota.bin` | `terradial-knob18-ota.bin` | The app image. What the panel downloads for itself — the names are fixed, and `BOARD_OTA_ASSET_NAME` in that board's [`include/boards/`](include/boards/) header has to keep matching them |
+| `terradial-factory.bin` | `terradial-knob18-factory.bin` | Bootloader + partitions + app, merged for flashing at `0x0`. What the web installer writes |
+
+The CrowPanel's names have no board suffix because they came first, and panels
+already in the field ask for them by name. Don't rename them.
 
 Publishing the installer page is a second workflow,
 [`pages.yml`](.github/workflows/pages.yml), which the first triggers on
@@ -329,8 +335,8 @@ should never use a bare pixel number or a font by name. On the 240px panel
 
 Each board updates itself from its own release asset (`terradial-ota.bin`
 for the CrowPanel, `terradial-knob18-ota.bin` for the Knob), so an update
-can't cross boards. The release workflow only builds the CrowPanel so far,
-so the Knob always reports "no update" until that changes.
+can't cross boards. Releases up to v0.1.4 carry only the CrowPanel's, so a
+Knob reports "no update" until the first release that includes it.
 
 By default no credentials are compiled in: the panel boots unconfigured and
 you pick a network on-device (Settings > Wi-Fi > scan). To bake in default
