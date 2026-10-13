@@ -21,7 +21,10 @@ namespace UiBrand
     // The same screen as a boot splash: it takes itself away once the mark
     // has drawn and held for a moment. Any input dismisses it sooner, the
     // same way it dismisses the idle screen.
-    void showSplash();
+    // If updatedTo is non-empty, the site line reads "Updated to <version>"
+    // and the splash holds a little longer: the first sight of new firmware
+    // after an OTA install should say it worked.
+    void showSplash(const char *updatedTo = nullptr);
     void hide();
     bool isShown();
 }

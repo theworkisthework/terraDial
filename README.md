@@ -227,6 +227,10 @@ and reboots into it, so a failed or interrupted download leaves the working
 firmware exactly where it was — there's no window where the panel is holding
 half a firmware.
 
+When the panel comes back on the new firmware, the boot splash's site line
+reads "Updated to vX.Y.Z" so the update visibly worked. If the new image didn't
+boot (and the old one came back), it says nothing.
+
 Two deliberate limits:
 
 - **It refuses while the machine is busy.** The download blocks the same task

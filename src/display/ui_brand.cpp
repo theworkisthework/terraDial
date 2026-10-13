@@ -3,17 +3,20 @@
 #include "logo_draw.h"
 #include "palette.h"
 #include "branding.h"
+#include <stdio.h>
 
 namespace
 {
     lv_obj_t *overlay = nullptr;
     lv_timer_t *splashTimer = nullptr;
+    char updatedLine[40] = "";
 
     // Unhurried: it's a pen drawing, not a loading bar.
     const uint32_t DRAW_MS = 6400;
     const uint32_t TEXT_FADE_MS = 600;
     // How long the finished mark holds before a boot splash clears itself.
     const uint32_t SPLASH_HOLD_MS = 1800;
+    const uint32_t UPDATED_HOLD_MS = 3500;
 
     void splashDone(lv_timer_t *)
     {
@@ -63,7 +66,7 @@ namespace UiBrand
         lv_obj_fade_in(nameLbl, TEXT_FADE_MS, DRAW_MS);
 
         lv_obj_t *siteLbl = lv_label_create(overlay);
-        lv_label_set_text(siteLbl, Branding::siteLabel());
+        lv_label_set_text(siteLbl, updatedLine[0] ? updatedLine : Branding::siteLabel());
         lv_obj_set_style_text_font(siteLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(siteLbl, Palette::accent(), 0);
         lv_obj_align(siteLbl, LV_ALIGN_CENTER, 0, px(84));
@@ -71,11 +74,15 @@ namespace UiBrand
         lv_obj_fade_in(siteLbl, TEXT_FADE_MS, DRAW_MS + 200);
     }
 
-    void showSplash()
+    void showSplash(const char *updatedTo)
     {
         if (overlay) return;
+        updatedLine[0] = '\0';
+        if (updatedTo && updatedTo[0]) snprintf(updatedLine, sizeof(updatedLine), "Updated to v%s", updatedTo);
         show();
-        splashTimer = lv_timer_create(splashDone, DRAW_MS + TEXT_FADE_MS + SPLASH_HOLD_MS, nullptr);
+        updatedLine[0] = '\0'; // only the splash says it; an idle logo later shows the site again
+        uint32_t hold = updatedTo && updatedTo[0] ? UPDATED_HOLD_MS : SPLASH_HOLD_MS;
+        splashTimer = lv_timer_create(splashDone, DRAW_MS + TEXT_FADE_MS + hold, nullptr);
         lv_timer_set_repeat_count(splashTimer, 1);
     }
 

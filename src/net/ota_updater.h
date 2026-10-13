@@ -61,4 +61,11 @@ namespace OtaUpdater
 
     // True once a successful install is waiting on ESP.restart().
     bool restartPending();
+
+    // Call once at boot. If the previous run flashed an update and this
+    // build is the version it flashed, returns that version ("" otherwise)
+    // so the boot splash can say the update worked. Always clears the flag,
+    // so it reports once; a boot that came up on a different version (the
+    // new image failed and rolled back) correctly reports nothing.
+    const char *takeJustUpdated();
 }
