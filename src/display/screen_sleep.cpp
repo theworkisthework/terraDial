@@ -6,6 +6,7 @@
 #include "ui_brand.h"
 #include "../led/panel_ring.h"
 #include "../power/battery.h"
+#include "../net/ota_updater.h"
 
 namespace
 {
@@ -77,6 +78,19 @@ namespace ScreenSleep
 
     void update()
     {
+        // A firmware flash must never be left running behind a dark or
+        // branded panel: the progress and the "don't power off" warning are
+        // the only things telling the user to leave it alone. Treated like
+        // the demo tour -- stay awake without counting as input.
+        OtaUpdater::State ota = OtaUpdater::state();
+        if (ota == OtaUpdater::State::Installing || ota == OtaUpdater::State::Done)
+        {
+            if (asleep) wake();
+            else if (UiBrand::isShown()) { UiBrand::hide(); undimLogo(); }
+            lastActivityAt = millis();
+            return;
+        }
+
         uint32_t idleMs = millis() - lastActivityAt;
 
         // Stage one: the brand screen. Runs on its own timer so it still
