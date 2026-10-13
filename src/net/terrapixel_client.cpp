@@ -280,6 +280,16 @@ void TerraPixelClient::update()
         }
         return;
     }
+    if (hostChangedPending_)
+    {
+        hostChangedPending_ = false;
+        haveIp_ = false;
+        lastResolveAttempt_ = 0;
+        refreshPending_ = true;
+        seededDesired_ = false;
+        status_.link = TerraPixelLink::Searching;
+        status_.reachable = false;
+    }
     if (status_.link == TerraPixelLink::Off)
     {
         status_.link = TerraPixelLink::Searching;

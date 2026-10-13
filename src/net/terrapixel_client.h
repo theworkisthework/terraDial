@@ -71,9 +71,8 @@ public:
     void setRadius(float radiusLeds);
     void toggleParty();
     void requestRefresh();
-    // The LED host setting changed: resolve it again before the next
-    // request rather than keep talking to the old address.
-    void hostChanged() { haveIp_ = false; lastResolveAttempt_ = 0; refreshPending_ = true; }
+    // The LED host setting changed: reset host-specific state on lightsTask.
+    void hostChanged() { hostChangedPending_ = true; }
 
 private:
     TerraPixelStatus status_;
@@ -93,6 +92,7 @@ private:
     volatile bool setDirty_ = false;
     volatile bool partyPending_ = false;
     volatile bool refreshPending_ = false;
+    volatile bool hostChangedPending_ = false;
     volatile bool desiredFilm_ = false;
     volatile uint8_t desiredBrightness_ = 200;
     volatile float desiredRadius_ = 3.5f;
