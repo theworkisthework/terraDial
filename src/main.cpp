@@ -306,7 +306,7 @@ void setup()
 {
     Serial.begin(115200);
     delay(300); // give the USB-CDC serial monitor time to attach before the first prints
-    Serial.printf("terraDial boot -- firmware %s on %s\n", Version::firmware(), BOARD_NAME);
+    Serial.printf("terraDial boot -- firmware %s on %s\n", Version::label(), BOARD_NAME);
 
     Config::begin();
 
@@ -339,12 +339,20 @@ void setup()
 }
 
 // While the screen sleeps, nobody is looking at it, so stop paying for it:
-//  - the panel itself goes into its own sleep (the backlight is already off,
-//    but the controller keeps scanning its RAM out to the glass without it),
-//  - the CPU drops from 240MHz to 80MHz -- the lowest Wi-Fi allows,
-//  - and loop() idles longer between passes (see below).
-// A plot carries on regardless: networkTask still streams, just at 80MHz,
-// which is plenty for a WebSocket.
+// the backlight is off (screen_sleep.cpp), the on-screen ring stops
+// animating, and loop() idles longer between passes (see below).
+// A plot carries on regardless.
+//
+// Two more savings were tried here and taken out again, because a dial that
+// went to sleep could come back black and unresponsive until it was
+// power-cycled:
+//  - dropping the CPU to 80MHz with setCpuFrequencyMhz(). Arduino switches
+//    the clock without stopping the other core, which is mid-Wi-Fi on the
+//    network task -- not something the S3 promises to survive, least of all
+//    with octal PSRAM. A dial wedged like that also stops reading its
+//    socket, and FluidNC keeps pushing status reports at it.
+//  - putting the ST77916 into its own sleep (SLPIN/SLPOUT). Small gain next
+//    to the backlight, and nothing has shown this glass waking from it.
 //
 // Wi-Fi power-save is handled separately, in updateWifiPowerSave().
 static bool lowPower = false;
@@ -372,17 +380,11 @@ static void updateWifiPowerSave()
 static void setLowPower(bool on)
 {
     lowPower = on;
-    if (on)
+    if (!on)
     {
-        gfx.sleep();
-        setCpuFrequencyMhz(80);
-    }
-    else
-    {
-        setCpuFrequencyMhz(240);
-        gfx.wakeup();
-        // The panel's RAM survives its sleep, but repaint anyway: anything
-        // that changed while it slept was drawn into a sleeping controller.
+        // Anything that changed while the backlight was off was drawn
+        // anyway, but repaint the lot -- cheap, and it means waking never
+        // shows a half-stale frame.
         lv_obj_invalidate(lv_scr_act());
         lv_obj_invalidate(lv_layer_top());
     }

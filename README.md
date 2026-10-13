@@ -76,7 +76,7 @@ the knob; drag on the drawing to put the nib where you want it.
 | | | |
 |:--:|:--:|:--:|
 | <img src="docs/screens/jobs-spirograph.svg?v=1" width="180"><br>**In Jobs** — the first entry at the SD root | <img src="docs/screens/spirograph.svg?v=1" width="180"><br>**Spirograph** — the gear rolls round the ring as it draws; ×3 interleaved copies | <img src="docs/screens/spirograph-outside.svg?v=1" width="180"><br>**Rolling outside** — a second family of shapes |
-| <img src="docs/screens/spirograph-plot.svg?v=1" width="180"><br>**Plot** — lift, home, draw 25mm in from home | | |
+| <img src="docs/screens/spirograph-plot.svg?v=2" width="180"><br>**Plot** — lift, home, draw 25mm in from home; then home again and run Y out past the drawing | | |
 
 ### Settings
 

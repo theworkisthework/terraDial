@@ -1182,8 +1182,8 @@ else if (WiFi.status() != WL_CONNECTED)
         // of an About screen is which build they're looking at -- and it's
         // the first thing worth quoting when reporting a fault.
         lv_obj_t *versionLbl = lv_label_create(card);
-        char versionBuf[32];
-        snprintf(versionBuf, sizeof(versionBuf), "Firmware %s", Version::firmware());
+        char versionBuf[48];
+        snprintf(versionBuf, sizeof(versionBuf), "Firmware %s", Version::label());
         lv_label_set_text(versionLbl, versionBuf);
         lv_obj_set_style_text_font(versionLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(versionLbl, Palette::textMuted(), 0);
