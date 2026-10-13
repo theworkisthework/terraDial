@@ -648,6 +648,10 @@ namespace
             text = "That's your plotter's address";
             col = Palette::accent();
         }
+else if (WiFi.status() != WL_CONNECTED)
+        {
+            text = "Searching...";
+        }
         else
         {
             switch (terraPixel.status().link)
