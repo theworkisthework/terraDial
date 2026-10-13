@@ -396,7 +396,9 @@ namespace
                     // G90 stated, as Park does: G53 needs absolute mode.
                     char cmd[40];
                     snprintf(cmd, sizeof(cmd), "G90 G53 G0 Y%.3f", plot.clearY);
-                    fluidNC.sendGcodeLine(cmd);
+                    // Nonblocking: if the queue's full the line is dropped, so
+                    // stay in this phase and offer it again next time.
+                    if (!fluidNC.sendGcodeLine(cmd)) return;
                     plot.active = false;
                     setResult("Done");
                 }

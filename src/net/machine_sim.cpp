@@ -348,15 +348,20 @@ void MachineSim::gcodeMove(const char *text)
 {
     bool relative = hasToken(text, "G91");
     bool machineCoords = hasToken(text, "G53");
+    // Moves chain: this one starts where the planner will have got to, so
+    // axes it leaves out (and relative offsets) carry on from there.
+    const float *from = mpos_;
+    if (planCount_ > 0) from = plan_[(planHead_ + planCount_ - 1) % PLAN_DEPTH].target;
+    else if (moving_) from = target_;
     float target[3];
-    memcpy(target, mpos_, sizeof(target));
+    memcpy(target, from, sizeof(target));
     bool any = false;
     for (int a = 0; a < 3; a++)
     {
         float v;
         if (!word(text, AXES[a], v)) continue;
         any = true;
-        if (relative) target[a] = mpos_[a] + v;
+        if (relative) target[a] = from[a] + v;
         else if (machineCoords) target[a] = v;
         else target[a] = v + wco_[a];
     }
@@ -367,8 +372,6 @@ void MachineSim::gcodeMove(const char *text)
     float feed = hasToken(text, "G0") ? RAPID_MM_MIN : modalFeed_;
 
     // Queued behind whatever's already moving; straight off if nothing is.
-    // Targets chain: a queued move starts from the previous one's end,
-    // which is mpos_ by the time it runs.
     if (planCount_ < PLAN_DEPTH)
     {
         Move &m = plan_[(planHead_ + planCount_) % PLAN_DEPTH];

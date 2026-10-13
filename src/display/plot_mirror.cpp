@@ -224,7 +224,16 @@ namespace PlotMirror
 
     void sample(const FluidNCStatus &st)
     {
-        if (!pts || !st.havePos) return;
+        if (!pts) return;
+        if (!st.havePos)
+        {
+            // Position lost (a disconnect): whatever the pen was doing, the
+            // next sample starts a new run rather than joining the last
+            // point from before the gap.
+            lastDown = false;
+            lastX = lastY = lastZ = NAN;
+            return;
+        }
 
         // A new job: the job flag rising, or the file changing under a
         // still-raised flag (back-to-back runs).

@@ -32,7 +32,8 @@ also drive).
   gantry out to the far end of Y so the finished plot can be photographed
   unobstructed. Sequenced against the status stream rather than fired blind,
   since G-code sent mid-homing is rejected
-- **Rail lighting** control via terraPixel — brightness, film mode, comet width
+- **Rail lighting** control via terraPixel — brightness, film mode, comet width.
+  Optional and off by default: switch it on under Settings → Machine
 - **On-device Wi-Fi setup**: scan for networks, pick one, type the password
 - **Machine status** shown on the panel's 5-LED ring, readable across the room
   — a jog chases a pixel the way you turned the knob, a plot breathes the
@@ -64,9 +65,9 @@ The home dial and the screens it opens, in dial order.
 
 | | | |
 |:--:|:--:|:--:|
-| <img src="docs/screens/home-dial.svg?v=2" width="180"><br>**Home** — 8 destinations, E‑Stop always red | <img src="docs/screens/home-confirm.svg?v=2" width="180"><br>**Home XY** — clear‑the‑bed gate | <img src="docs/screens/jog.svg?v=2" width="180"><br>**Jog** — axis, position, per‑axis zero |
+| <img src="docs/screens/home-dial.svg?v=3" width="180"><br>**Home** — 7 destinations, E‑Stop always red | <img src="docs/screens/home-confirm.svg?v=2" width="180"><br>**Home XY** — clear‑the‑bed gate | <img src="docs/screens/jog.svg?v=2" width="180"><br>**Jog** — axis, position, per‑axis zero |
 | <img src="docs/screens/pen.svg?v=2" width="180"><br>**Pen** — up / down | <img src="docs/screens/jobs.svg?v=3" width="180"><br>**Jobs** — SD files on an open arc | <img src="docs/screens/estop.svg?v=2" width="180"><br>**E‑Stop** — feed hold + soft reset |
-| <img src="docs/screens/lights.svg?v=2" width="180"><br>**Lights** — terraPixel rail control | <img src="docs/screens/home-dial-knob.svg?v=1" width="180"><br>**Home on the Waveshare Knob** — status ring on screen, battery in the hub | |
+| <img src="docs/screens/lights.svg?v=3" width="180"><br>**Lights** — terraPixel rail control; on the dial once terraPixel is switched on | <img src="docs/screens/home-dial-knob.svg?v=1" width="180"><br>**Home on the Waveshare Knob** — status ring on screen, battery in the hub | |
 
 ### Spirograph
 
@@ -85,8 +86,8 @@ The Settings sub‑menu, then each of its pages.
 | | | |
 |:--:|:--:|:--:|
 | <img src="docs/screens/settings-ring.svg?v=2" width="180"><br>**Settings sub‑menu** — Wi‑Fi, Machine, Display, About | <img src="docs/screens/settings-wifi.svg?v=2" width="180"><br>**Wi‑Fi** — network, password, connect | <img src="docs/screens/settings-wifi-scan.svg?v=2" width="180"><br>**Wi‑Fi: network picker** — tap the SSID to scan |
-| <img src="docs/screens/settings-machine-host.svg?v=4" width="180"><br>**Machine: hosts** — FluidNC host / IP | <img src="docs/screens/settings-machine-pen.svg?v=4" width="180"><br>**Machine: pen up / down commands** — swap, reset to defaults | <img src="docs/screens/settings-machine-terrapixel.svg?v=2" width="180"><br>**Machine: terraPixel** — lights host / IP |
-| <img src="docs/screens/settings-display.svg?v=3" width="180"><br>**Display: screen** — brightness, idle logo, menu rotation | <img src="docs/screens/settings-display-sleep.svg?v=2" width="180"><br>**Display: sleep** — sleep timeout, ring sleep brightness | <img src="docs/screens/about.svg?v=2" width="180"><br>**About** — identity, QR links, diagnostics |
+| <img src="docs/screens/settings-machine-host.svg?v=4" width="180"><br>**Machine: hosts** — FluidNC host / IP | <img src="docs/screens/settings-machine-pen.svg?v=4" width="180"><br>**Machine: pen up / down commands** — swap, reset to defaults | <img src="docs/screens/settings-machine-terrapixel.svg?v=3" width="180"><br>**Machine: terraPixel** — optional rail lights: switch, host / IP, live status |
+| <img src="docs/screens/settings-display.svg?v=4" width="180"><br>**Display: screen** — brightness, ring brightness, idle logo | <img src="docs/screens/settings-display-sleep.svg?v=2" width="180"><br>**Display: sleep** — menu rotation, sleep timeout, ring sleep brightness | <img src="docs/screens/about.svg?v=2" width="180"><br>**About** — identity, QR links, diagnostics |
 
 ### Pop-up screens
 
@@ -183,7 +184,8 @@ in shot. Two things worth knowing if you do:
   "trickle" mode avoid this; otherwise turn sleep off (Settings → Display)
   when running from one.
 - The bezel LED ring draws on the same supply, so a high ring brightness
-  costs battery life directly. It's on the Lights screen if you want it down.
+  costs battery life directly. It's under Settings → Display (Ring brightness)
+  if you want it down.
 
 Enclosure files (`dial case.stl`, `frame mount.stl`, `backplate.dxf`) are in
 the repo root.
@@ -364,9 +366,10 @@ The knob is the primary input; touch works everywhere too.
 | Tap the centre hub | The running job, the active alarm, or E-Stop if the machine is moving — otherwise whatever the hub is naming |
 | Double click | Run/delete prompt (Jobs screen only) |
 
-**Home** is a radial dial of eight destinations, ordered the way a session
+**Home** is a radial dial of seven destinations, ordered the way a session
 actually runs rather than by category — Home XY, Jog, Pen, Jobs, Photo,
-E-Stop, Lights, Settings. The ring rests on the first of them, so the first
+E-Stop, Settings. Lights joins them, between E-Stop and Settings, once
+terraPixel is switched on under Settings → Machine. The ring rests on the first of them, so the first
 thing under the selection when the panel wakes is the first thing you do.
 **Jobs** and **Settings** use the same ring on an open arc, which keeps the
 bottom of the face clear of the back button.
@@ -420,11 +423,13 @@ design_handoff_radial_dial_ui/   the original design brief (historical)
 
 Some notes worth knowing before changing things:
 
-- **Networking runs on core 0**, in its own task (see `networkTask` in
-  `main.cpp`). mDNS lookups, WebSocket reads and HTTP calls all block for
-  seconds at a time; running them in `loop()` stalls rendering and touch.
-  Commands travel UI→network through a queue, and **nothing outside that task
-  may touch LVGL** — LVGL is single-threaded and lives on core 1.
+- **Networking runs on core 0**, in two tasks (see `networkTask` and
+  `lightsTask` in `main.cpp`). mDNS lookups, WebSocket reads and HTTP calls
+  all block for seconds at a time; running them in `loop()` stalls rendering
+  and touch. terraPixel has a task of its own so its HTTP calls can't hold up
+  the FluidNC connection either. Commands travel UI→network through a queue,
+  and **nothing outside the UI loop may touch LVGL** — LVGL is
+  single-threaded and lives on core 1.
 - **It's a round screen.** Anything more than ~120px from centre (120,120) is
   behind the bezel and physically unreachable, corners included. Several bugs
   have come from laying out against the 240×240 square instead of the circle.
