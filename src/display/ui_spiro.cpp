@@ -7,6 +7,7 @@
 #include "../config/settings.h"
 #include "../net/fluidnc_client.h"
 #include "ui_pen.h"
+#include "ui_park.h"
 #include "machine_extents.h"
 #include <esp_heap_caps.h>
 #include <math.h>
@@ -278,6 +279,9 @@ namespace
         if (st.jobActive || (st.mode != MachineMode::Idle && st.mode != MachineMode::Done &&
                              st.mode != MachineMode::Alarm))
             return "Wait for the machine to be idle";
+        // Park homes and travels with the machine Idle in between, the same
+        // way a plot does, so the status alone doesn't show it's running.
+        if (uiParkActive()) return "Wait for Park to finish";
         return nullptr;
     }
 
