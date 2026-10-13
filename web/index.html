@@ -4,14 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Install terraDial</title>
-<meta name="description" content="Flash terraDial firmware onto a CrowPanel 1.28in round display from your browser -- no toolchain, no compiling.">
+<meta name="description" content="Flash terraDial firmware onto a CrowPanel 1.28in or Waveshare Knob 1.8in round display from your browser -- no toolchain, no compiling.">
 
 <!--
   The web installer for terraDial.
 
-  Published by .github/workflows/release.yml, which copies this file, the
-  generated manifest.json and terradial-factory.bin into one directory and
-  deploys them together. That co-location is deliberate: everything the
+  Published by .github/workflows/pages.yml, which copies this file, one
+  generated manifest per board (manifest.json for the CrowPanel,
+  manifest-knob18.json for the Waveshare Knob) and their factory images into
+  one directory and deploys them together. That co-location is deliberate: everything the
   installer fetches is same-origin, so no browser can decline the download
   of the firmware image on CORS grounds.
 
@@ -57,7 +58,11 @@
     border-radius: 14px;
     padding: 1.5rem;
     text-align: center;
+    margin-bottom: 1rem;
   }
+  .install h3 { margin: 0 0 .2rem; font-size: 1.1rem; }
+  .install .board { color: var(--text-muted); font-size: .9rem; margin: 0 0 1.1rem; }
+  .install .missing { color: var(--text-muted); font-size: .9rem; }
 
   .version { color: var(--text-muted); font-size: .85rem; margin-top: .9rem; }
   .version strong { color: var(--text); font-weight: 600; }
@@ -115,14 +120,16 @@
 <main>
   <h1>Install terraDial</h1>
   <p class="tagline">
-    Firmware for the terraPen control panel &mdash; the CrowPanel 1.28&Prime;
-    round display. Plug it in, click the button, done. Nothing to compile and
-    nothing to install on your computer.
+    Firmware for the terraPen control panel. Pick your board, plug it in,
+    click its button, done. Nothing to compile and nothing to install on your
+    computer.
   </p>
 
   <div class="install">
+    <h3>Elecrow CrowPanel 1.28&Prime;</h3>
+    <p class="board">240&times;240, push-button knob, LED ring</p>
     <esp-web-install-button manifest="manifest.json">
-      <button class="flash" slot="activate">Connect and install</button>
+      <button class="flash" slot="activate">Install on the CrowPanel</button>
       <span slot="unsupported" class="unsupported">
         Your browser can't talk to USB devices. Use Chrome or Edge on a
         desktop &mdash; Safari, Firefox and every mobile browser lack the
@@ -132,15 +139,35 @@
         This page has to be served over HTTPS to reach the USB port.
       </span>
     </esp-web-install-button>
-    <p class="version">Latest firmware: <strong id="version">&hellip;</strong></p>
+    <p class="version">Latest firmware: <strong data-manifest="manifest.json">&hellip;</strong></p>
+  </div>
+
+  <div class="install" id="knob18">
+    <h3>Waveshare ESP32-S3 Knob 1.8&Prime;</h3>
+    <p class="board">360&times;360, haptic knob, battery</p>
+    <esp-web-install-button manifest="manifest-knob18.json">
+      <button class="flash" slot="activate">Install on the Knob</button>
+      <span slot="unsupported" class="unsupported">
+        Your browser can't talk to USB devices. Use Chrome or Edge on a
+        desktop &mdash; Safari, Firefox and every mobile browser lack the
+        Web Serial support this needs.
+      </span>
+      <span slot="not-allowed" class="unsupported">
+        This page has to be served over HTTPS to reach the USB port.
+      </span>
+    </esp-web-install-button>
+    <p class="version">Latest firmware: <strong data-manifest="manifest-knob18.json">&hellip;</strong></p>
   </div>
 
   <h2>What to expect</h2>
   <ol>
     <li>Connect the panel to your computer with a USB-A data cable. Charge-only
       cables are the single most common reason the port doesn't appear.</li>
-    <li>Click <em>Connect and install</em> and pick the panel from the list of
-      serial ports.</li>
+    <li>Click the button for <strong>your</strong> board and pick the panel from
+      the list of serial ports. The two boards use the same chip, so the
+      installer can't tell them apart &mdash; firmware for the other board
+      will install, but the panel won't work. If that happens, come back and
+      use the right button.</li>
     <li>Choose <em>Install terraDial</em>. It erases and writes the whole chip,
       which takes a minute or two.</li>
     <li>When it's finished, the panel reboots into the dial.</li>
@@ -171,24 +198,43 @@
       the automatic reset doesn't take.</li>
     <li>Close anything else holding the port &mdash; a serial monitor, the
       Arduino IDE, <code>pio device monitor</code>.</li>
+    <li><strong>Waveshare Knob:</strong> its USB-C socket reaches one of two
+      chips depending on which way round the plug goes in. If the installer
+      says it found an ESP32 rather than an ESP32-S3, turn the plug over.</li>
   </ul>
 
   <footer>
     <a href="https://github.com/theworkisthework/terraDial">Source on GitHub</a>
     &middot; <a href="https://terrapen.xyz">terrapen.xyz</a>
     &middot; MIT licensed
-    &middot; <a href="https://github.com/theworkisthework/terraDial/blob/master/THIRD_PARTY_NOTICES.md">Third-party licences</a>
+    &middot; <a href="https://github.com/theworkisthework/terraDial/blob/main/THIRD_PARTY_NOTICES.md">Third-party licences</a>
   </footer>
 </main>
 
 <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
 <script>
-  // The manifest is the one thing on this page that changes per release, so
-  // read the version out of it rather than stamping it into the HTML.
-  fetch("manifest.json")
-    .then((r) => r.json())
-    .then((m) => { document.getElementById("version").textContent = m.version; })
-    .catch(() => { document.getElementById("version").textContent = "see releases"; });
+  // The manifests are the one thing on this page that changes per release,
+  // so read each board's version out of its own rather than stamping it into
+  // the HTML.
+  document.querySelectorAll("[data-manifest]").forEach((el) => {
+    fetch(el.dataset.manifest)
+      .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then((m) => { el.textContent = m.version; })
+      .catch(() => {
+        // Releases from before the Knob was added carry no Knob image, so
+        // pages.yml publishes no manifest-knob18.json. Say so, rather than
+        // offering a button that fails once the user has plugged in.
+        if (el.dataset.manifest === "manifest-knob18.json") {
+          const card = document.getElementById("knob18");
+          card.querySelector("esp-web-install-button").remove();
+          card.querySelector(".version").outerHTML =
+            '<p class="missing">Not in a release yet &mdash; build it from ' +
+            '<a href="https://github.com/theworkisthework/terraDial#building">source</a> for now.</p>';
+        } else {
+          el.textContent = "see releases";
+        }
+      });
+  });
 </script>
 </body>
 </html>

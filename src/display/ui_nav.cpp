@@ -15,6 +15,7 @@
 #include "ui_spiro.h"
 #include "../input/encoder.h"
 #include "radial_keyboard.h"
+#include "fancy_qr.h"
 #include "screen_sleep.h"
 #include "demo_tour.h"
 #include "../net/fluidnc_client.h"
@@ -260,6 +261,14 @@ namespace UiNav
         // up: rotate spins the ring, click types the key at the top,
         // long-press cancels. Nothing below runs, so no screen can navigate out from
         // under an open text field.
+        // A big QR code (About) is up for a phone to read, not to be driven:
+        // any turn or click just puts it away.
+        if (FancyQr::isOpen())
+        {
+            if (delta != 0 || ev != ButtonEvent::None) FancyQr::close();
+            return;
+        }
+
         if (RadialKeyboard::isOpen())
         {
             if (delta != 0) RadialKeyboard::handleRotate(menuDelta);

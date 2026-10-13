@@ -47,7 +47,8 @@ also drive).
   working with no machine around, and a self-running tour of them
 - On the **Waveshare Knob**: a haptic tick per knob detent and a battery gauge
 - **About screen** carrying the project identity and QR links to the site,
-  source and Discord — a 240px dial is no place to read a URL
+  the terraPen documentation, source and Discord — a 240px dial is no place to
+  read a URL
 
 ## Screens
 
@@ -200,7 +201,10 @@ running it.
 <https://theworkisthework.github.io/terraDial/>
 
 Plug the panel into a computer with a USB-A **data** cable, open that page in
-Chrome or Edge on the desktop, and click *Connect and install*. It talks to the
+Chrome or Edge on the desktop, and click the install button for **your**
+board — the CrowPanel and the Knob each have their own. Both are ESP32-S3s, so
+the installer can't tell them apart and will happily write the wrong board's
+firmware. It talks to the
 panel over Web Serial and writes the whole chip — bootloader, partition table
 and app — so it also works on a board that has never been flashed, and on one
 that has been flashed with something broken.
@@ -246,13 +250,16 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-That builds the firmware with the tag stamped in, attaches two images to the
-GitHub Release, and redeploys the installer page:
+That builds the firmware for both boards with the tag stamped in, attaches two
+images per board to the GitHub Release, and redeploys the installer page:
 
-| Asset | What it is |
-|---|---|
-| `terradial-ota.bin` | The app image. What the panel downloads for itself — the name is fixed, and `OTA_ASSET_NAME` in [`src/net/ota_updater.h`](src/net/ota_updater.h) has to keep matching it |
-| `terradial-factory.bin` | Bootloader + partitions + app, merged for flashing at `0x0`. What the web installer writes |
+| CrowPanel | Waveshare Knob | What it is |
+|---|---|---|
+| `terradial-ota.bin` | `terradial-knob18-ota.bin` | The app image. What the panel downloads for itself — the names are fixed, and `BOARD_OTA_ASSET_NAME` in that board's [`include/boards/`](include/boards/) header has to keep matching them |
+| `terradial-factory.bin` | `terradial-knob18-factory.bin` | Bootloader + partitions + app, merged for flashing at `0x0`. What the web installer writes |
+
+The CrowPanel's names have no board suffix because they came first, and panels
+already in the field ask for them by name. Don't rename them.
 
 Publishing the installer page is a second workflow,
 [`pages.yml`](.github/workflows/pages.yml), which the first triggers on
@@ -331,8 +338,8 @@ should never use a bare pixel number or a font by name. On the 240px panel
 
 Each board updates itself from its own release asset (`terradial-ota.bin`
 for the CrowPanel, `terradial-knob18-ota.bin` for the Knob), so an update
-can't cross boards. The release workflow only builds the CrowPanel so far,
-so the Knob always reports "no update" until that changes.
+can't cross boards. Releases up to v0.1.4 carry only the CrowPanel's, so a
+Knob reports "no update" until the first release that includes it.
 
 By default no credentials are compiled in: the panel boots unconfigured and
 you pick a network on-device (Settings > Wi-Fi > scan). To bake in default
@@ -445,9 +452,12 @@ Some notes worth knowing before changing things:
   actually an alarm and holds the `$H` until that has landed. For the same
   reason jogging is refused mid-homing — the jog-cancel realtime byte would
   stop the cycle, and FluidNC alarms on a homing cycle that didn't finish.
-- Project links live in [`include/branding.h`](include/branding.h). The
-  Discord URL is deliberately empty until there's a real invite — an entry
-  with no URL is skipped rather than rendered as a QR that goes nowhere.
+- Project links live in [`include/branding.h`](include/branding.h). An
+  entry with no URL is skipped rather than rendered as a QR that goes nowhere.
+  The QR codes are drawn by [`fancy_qr.cpp`](src/display/fancy_qr.cpp), not
+  LVGL's `lv_qrcode`: palette colours, rounded corner eyes, and a tap opens a
+  full-screen one at the highest error correction, with the terraPen mark
+  drawing itself into the middle.
   `githubOwner()`/`githubRepo()` there are also what the updater queries, so
   a repo rename means editing them. The old **terraTouch** name still
   resolves, but only as a 301, and GitHub's API answers a redirect with a

@@ -1,13 +1,22 @@
 name: Release firmware
 
 # Tag a commit and push the tag; everything an end user needs comes out the
-# other side:
+# other side, for each supported board:
 #
-#   * terradial-ota.bin      -- the app image the panel flashes itself with
-#                               (Settings > About > Check for updates)
-#   * terradial-factory.bin  -- bootloader + partitions + app, flashed at 0x0
-#                               by the web installer, and the only thing that
-#                               works on a blank board
+#   CrowPanel 1.28"               Waveshare Knob 1.8"
+#   terradial-ota.bin             terradial-knob18-ota.bin
+#   terradial-factory.bin         terradial-knob18-factory.bin
+#
+#   * *-ota.bin      -- the app image the panel flashes itself with
+#                       (Settings > About > Check for updates). Each board
+#                       asks for its own by name -- BOARD_OTA_ASSET_NAME in
+#                       include/boards/ -- so an update can't cross boards.
+#   * *-factory.bin  -- bootloader + partitions + app, flashed at 0x0 by the
+#                       web installer, and the only thing that works on a
+#                       blank board
+#
+# The CrowPanel's names carry no board suffix because they predate the Knob,
+# and panels already in the field ask for them. Don't rename them.
 #
 # Both are attached to the GitHub Release. Publishing the installer PAGE is
 # a separate workflow (pages.yml) that this one triggers on success -- the
@@ -26,20 +35,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          # ota/factory names: BOARD_OTA_ASSET_NAME in include/boards/*.h
-          # has to keep matching the ota one. The CrowPanel keeps the
-          # original unsuffixed names.
-          - env: crowpanel-1_28-rotary
-            ota: terradial-ota.bin
-            factory: terradial-factory.bin
-          - env: waveshare-knob-1_8
-            ota: terradial-knob18-ota.bin
-            factory: terradial-knob18-factory.bin
-    env:
-      PIO_ENV: ${{ matrix.env }}
     steps:
       - uses: actions/checkout@v4
 
@@ -59,7 +54,7 @@ jobs:
           path: |
             ~/.platformio
             ~/.cache/pip
-          key: pio-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
 
       - name: Install PlatformIO and esptool
         run: pip install --upgrade platformio esptool
@@ -70,36 +65,44 @@ jobs:
         # and the user picks theirs on-device (Settings > Wi-Fi > scan).
         env:
           TERRADIAL_VERSION: ${{ steps.version.outputs.version }}
-        run: pio run -e $PIO_ENV
+        run: pio run -e crowpanel-1_28-rotary -e waveshare-knob-1_8
 
       - name: Assemble release images
         run: |
           set -eu
-          BUILD=".pio/build/$PIO_ENV"
           mkdir -p dist
-
-          # The app image, exactly as it lands in app0/app1. This is what
-          # the on-device updater downloads -- OTA_ASSET_NAME in
-          # src/net/ota_updater.h has to keep matching this filename.
-          cp "$BUILD/firmware.bin" "dist/${{ matrix.ota }}"
 
           # boot_app0.bin lives in the Arduino framework package, not the
           # build directory, and its path carries the package version.
           BOOT_APP0="$(find ~/.platformio/packages -name boot_app0.bin | head -n1)"
           test -n "$BOOT_APP0"
 
-          # Offsets are ESP32-S3's, and the bootloader one is the trap: it
-          # sits at 0x0 here, not the 0x1000 the original ESP32 uses.
-          # "keep" leaves flash mode/frequency/size exactly as PlatformIO
-          # built them into the bootloader header, so the merged image
-          # boots identically to a `pio run -t upload`.
-          esptool.py --chip esp32s3 merge_bin \
-            -o "dist/${{ matrix.factory }}" \
-            --flash_mode keep --flash_freq keep --flash_size keep \
-            0x0     "$BUILD/bootloader.bin" \
-            0x8000  "$BUILD/partitions.bin" \
-            0xe000  "$BOOT_APP0" \
-            0x10000 "$BUILD/firmware.bin"
+          # assemble <pio env> <asset prefix>
+          assemble() {
+            BUILD=".pio/build/$1"
+
+            # The app image, exactly as it lands in app0/app1. This is what
+            # the on-device updater downloads -- BOARD_OTA_ASSET_NAME in that
+            # board's include/boards/ header has to keep matching it.
+            cp "$BUILD/firmware.bin" "dist/$2-ota.bin"
+
+            # Offsets are ESP32-S3's, and the bootloader one is the trap: it
+            # sits at 0x0 here, not the 0x1000 the original ESP32 uses.
+            # Both boards are S3s on the same partition table, so the same
+            # offsets serve both. "keep" leaves flash mode/frequency/size
+            # exactly as PlatformIO built them into the bootloader header,
+            # so the merged image boots identically to a `pio run -t upload`.
+            esptool.py --chip esp32s3 merge_bin \
+              -o "dist/$2-factory.bin" \
+              --flash_mode keep --flash_freq keep --flash_size keep \
+              0x0     "$BUILD/bootloader.bin" \
+              0x8000  "$BUILD/partitions.bin" \
+              0xe000  "$BOOT_APP0" \
+              0x10000 "$BUILD/firmware.bin"
+          }
+
+          assemble crowpanel-1_28-rotary terradial
+          assemble waveshare-knob-1_8    terradial-knob18
 
           ls -l dist
 
@@ -120,5 +123,7 @@ jobs:
           # suffixed tags out of `latest` means it never has to.
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            dist/${{ matrix.ota }}
-            dist/${{ matrix.factory }}
+            dist/terradial-ota.bin
+            dist/terradial-factory.bin
+            dist/terradial-knob18-ota.bin
+            dist/terradial-knob18-factory.bin

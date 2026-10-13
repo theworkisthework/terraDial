@@ -13,6 +13,7 @@
 #include "lgfx_config.h" // backlightSet()
 #include "radial_keyboard.h"
 #include "icon_logo.h"
+#include "fancy_qr.h"
 #include "../input/mic.h"
 #include "../input/haptics.h"
 #include "branding.h"
@@ -942,15 +943,11 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_obj_set_style_text_font(capLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(capLbl, Palette::textMuted(), 0);
 
-        // Light background with dark modules, NOT the UI palette inverted:
+        // Dark modules on a light card, NOT the UI palette inverted:
         // scanners are far more reliable on conventional polarity, and a
-        // code nobody's phone will read is decoration, not a link.
-        lv_obj_t *qr = lv_qrcode_create(parent, px(104), Palette::bgApp(), lv_color_white());
-        lv_qrcode_update(qr, url, strlen(url));
-        // Quiet zone: the spec wants clear space around the symbol, and
-        // without it the dark UI crowds the edge modules.
-        lv_obj_set_style_border_color(qr, lv_color_white(), 0);
-        lv_obj_set_style_border_width(qr, px(4), 0);
+        // code nobody's phone will read is decoration, not a link. Tapping
+        // it opens a big one (fancy_qr.h).
+        FancyQr::create(parent, url, caption, px(112));
     }
 
     // ---- firmware update, on the About card ----
@@ -1189,6 +1186,7 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_obj_set_style_text_color(versionLbl, Palette::textMuted(), 0);
 
         addLinkQr(card, "terrapen.xyz", Branding::siteUrl());
+        addLinkQr(card, "Documentation", Branding::docsUrl());
         addLinkQr(card, "Source on GitHub", Branding::githubUrl());
         addLinkQr(card, "Discord", Branding::discordUrl());
 

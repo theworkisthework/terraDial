@@ -23,6 +23,9 @@ namespace Branding
     inline const char *mdnsAddress() { return "terradial.local"; }
 
     inline const char *siteUrl() { return "https://terrapen.xyz"; }
+    // The terraPen user docs (terraPenDocumentation), published to GitHub
+    // Pages by that repo's publish workflow.
+    inline const char *docsUrl() { return "https://theworkisthework.github.io/terraPenDocumentation/"; }
     // Owner/repo split out because the updater needs them separately for
     // GitHub's releases API, and one source of truth beats a URL and an API
     // path drifting apart.
@@ -43,8 +46,7 @@ namespace Branding
 
     inline const char *githubUrl() { return "https://github.com/theworkisthework/terraDial"; }
 
-    // TODO: paste the real invite. Left empty deliberately -- an invented
-    // invite code would render a QR that silently goes nowhere, which is
-    // worse than not showing one at all.
-    inline const char *discordUrl() { return ""; }
+    // The invite the terraPen documentation gives. An empty string here
+    // hides the Discord QR on About rather than show one that goes nowhere.
+    inline const char *discordUrl() { return "https://discord.gg/fEXrmUm5nR"; }
 }
