@@ -3,6 +3,8 @@
 #include "palette.h"
 #include "radial_ring.h"
 #include "ui_widgets.h"
+#include "../config/settings.h"
+#include "../net/demo_mode.h"
 #include <string.h>
 
 // Home: a radial dial -- 8 destinations arranged on a ring around a centre
@@ -76,6 +78,23 @@ namespace
         {"Settings", LUCIDE_SETTINGS, false},
     };
     const int DIAL_ITEM_COUNT = 8;
+    const int LIGHTS_ITEM = 6;
+
+    // Lights is only on the ring while terraPixel is switched on in
+    // Settings > Machine (or demo mode is showing off simulated lights).
+    // Deliberately the setting and not terraPixel's reachability: a ring
+    // that gained and lost an item as the lights dropped on and off the
+    // network would reshuffle under the knob, and would hide the Lights
+    // screen exactly when its status is what you need to see.
+    bool lightsWanted() { return Config::get().terraPixelEnabled || Demo::isOn(); }
+
+    // Ring position -> DIAL_ITEMS index for the items actually on the ring.
+    // DIAL_ITEMS indices are what the rest of the firmware speaks (ui_nav's
+    // screen switch, the demo tour), so they stay fixed whatever is shown;
+    // only this mapping changes.
+    int activeItems[DIAL_ITEM_COUNT];
+    int activeCount = 0;
+    bool lightsShown = false;
 
     // Holds the selected item's name + machine status. Sized so the widest
     // status word, "CONNECTING", fits across the hub at the status line's
@@ -110,13 +129,14 @@ namespace
 
     void updateNameLabel()
     {
-        lv_label_set_text(nameLbl, DIAL_ITEMS[ring.selectedIndex()].label);
+        lv_label_set_text(nameLbl, DIAL_ITEMS[activeItems[ring.selectedIndex()]].label);
     }
 
     void onSelect(int) { updateNameLabel(); }
 
-    void onItemStyle(lv_obj_t *card, int i, float nearness)
+    void onItemStyle(lv_obj_t *card, int pos, float nearness)
     {
+        int i = activeItems[pos]; // the ring speaks positions; the arrays below are by item
         // Card fades from the raised navy surface up to the red accent as it
         // approaches the top slot; its icon fades from muted to full white
         // so the selected item is unmistakable. E-Stop opts out of both the
@@ -181,6 +201,45 @@ namespace
     // screen worth jumping to, in which case the tap meant that rather than
     // "open the selected item".
     bool (*onStatusTap)() = nullptr;
+
+    // Supplied by ui_nav, called with a DIAL_ITEMS index.
+    void (*onOpenItem)(int index) = nullptr;
+    void onRingOpen(int pos)
+    {
+        if (onOpenItem) onOpenItem(activeItems[pos]);
+    }
+
+    lv_obj_t *dialScreen = nullptr;
+    lv_obj_t *hubObj = nullptr;
+
+    // (Re)builds the ring from scratch to match lightsWanted(). Cards can't
+    // just be hidden: RadialRing lays out every item it holds, so a hidden
+    // one would leave a gap. Keeps the selection on the same item where it
+    // still exists -- this runs as you leave Settings, and you should come
+    // back to the Settings chip, not wherever position 0 now is.
+    void buildRing()
+    {
+        int keepItem = activeCount ? activeItems[ring.selectedIndex()] : 0;
+        lightsShown = lightsWanted();
+        ring.clear();
+        activeCount = 0;
+        for (int i = 0; i < DIAL_ITEM_COUNT; i++)
+        {
+            if (i == LIGHTS_ITEM && !lightsShown) continue;
+            iconSize[i] = UiRingIconSmall; // makeCard draws at Small; see there
+            activeItems[activeCount++] = i;
+            ring.addItem(makeCard(dialScreen, i));
+        }
+        // Cards are created after the hub, so raise it back above them.
+        lv_obj_move_foreground(hubObj);
+        for (int pos = 0; pos < activeCount; pos++)
+        {
+            if (activeItems[pos] != keepItem) continue;
+            for (int s = 0; s < pos; s++) ring.selectNext();
+            break;
+        }
+        updateNameLabel();
+    }
 
     void hubTapCb(lv_event_t *e)
     {
@@ -268,6 +327,8 @@ lv_obj_t *uiDialCreate()
     // stationary. Holds the selected item's name (so rotating never hides
     // it behind the top card) and the live machine status.
     lv_obj_t *hub = lv_obj_create(scr);
+    dialScreen = scr;
+    hubObj = hub;
     lv_obj_set_size(hub, HUB_SIZE, HUB_SIZE);
     lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(hub, Palette::bgSecondary(), 0);
@@ -302,28 +363,29 @@ lv_obj_t *uiDialCreate()
     ring.setSpread(RING_SPREAD);
     ring.setOnItemStyle(onItemStyle);
     ring.setOnSelect(onSelect);
-    for (int i = 0; i < DIAL_ITEM_COUNT; i++) ring.addItem(makeCard(scr, i));
-
-    // Items are created after the hub, so raise it back above them.
-    lv_obj_move_foreground(hub);
-
-    updateNameLabel();
+    ring.setOnOpen(onRingOpen);
+    buildRing();
     return scr;
 }
 
 void uiDialSetHandlers(void (*onOpen)(int index), bool (*onStatus)())
 {
-    ring.setOnOpen(onOpen);
+    onOpenItem = onOpen;
     onStatusTap = onStatus;
 }
 
 void uiDialSelectNext() { ring.selectNext(); }
 void uiDialSelectPrev() { ring.selectPrev(); }
 void uiDialOpenSelected() { ring.openSelected(); }
-int uiDialSelectedIndex() { return ring.selectedIndex(); }
+int uiDialSelectedIndex() { return activeItems[ring.selectedIndex()]; }
 
 void uiDialUpdate(const FluidNCStatus &st)
 {
+    // Lights comes and goes with Settings > Machine's switch and with demo
+    // mode, both only changed from the Settings screen -- so this rebuild
+    // always happens out of sight, before you're back on the dial.
+    if (lightsWanted() != lightsShown) buildRing();
+
     // A live job says PROGRESS rather than RUN, because on a live job this
     // label is a button: it is the hub tap that opens the Job Progress
     // screen (see the note at the top of this file), and a control should

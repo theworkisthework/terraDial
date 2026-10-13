@@ -211,6 +211,9 @@ namespace
         {
             case Op::Dial:
                 if (!UiNav::isOnDial()) UiNav::goHome();
+                // Item index == ring position, all 8 on the ring: demo mode
+                // always puts Lights on the dial (see ui_dial.cpp's
+                // lightsWanted()), so nothing the tour steers by is missing.
                 detents = menuToRaw(ringSteps(uiDialSelectedIndex(), s.arg, 8));
                 break;
             case Op::Category:

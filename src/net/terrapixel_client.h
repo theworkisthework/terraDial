@@ -3,10 +3,22 @@
 #include <Arduino.h>
 #include <IPAddress.h>
 
+// What the panel can tell about the terraPixel host it's pointed at, for
+// Settings > Machine to show beside the field.
+enum class TerraPixelLink : uint8_t
+{
+    Off,         // switched off in Settings -- nothing is contacted
+    Searching,   // on, no answer yet either way
+    NotFound,    // the name doesn't resolve, or nothing answers there
+    WrongDevice, // something answers, but not with terraPixel's /status
+    Connected,
+};
+
 // Snapshot of terraPixel's state, read from its /status endpoint (added to
 // warderoid-ctrl/terraPixel alongside /party -- see that repo's main.cpp).
 struct TerraPixelStatus
 {
+    TerraPixelLink link = TerraPixelLink::Off;
     bool reachable = false; // false until the first successful /status read
     bool filmMode = false;
     uint8_t brightness = 200;
@@ -42,7 +54,9 @@ public:
 
     // lightsTask only. Applies whatever the UI asked for, and refreshes
     // status on its own schedule -- or, in demo mode (demo_mode.h), plays
-    // pretend lights that take the settings without any network.
+    // pretend lights that take the settings without any network. Does
+    // nothing at all while terraPixel is switched off in Settings, demo
+    // aside.
     void update();
     bool inDemo() const { return demoActive_; }
 
@@ -57,9 +71,8 @@ public:
     void setRadius(float radiusLeds);
     void toggleParty();
     void requestRefresh();
-    // The LED host setting changed: resolve it again before the next
-    // request rather than keep talking to the old address.
-    void hostChanged() { haveIp_ = false; lastResolveAttempt_ = 0; }
+    // The LED host setting changed: reset host-specific state on lightsTask.
+    void hostChanged() { hostChangedPending_ = true; }
 
 private:
     TerraPixelStatus status_;
@@ -79,6 +92,7 @@ private:
     volatile bool setDirty_ = false;
     volatile bool partyPending_ = false;
     volatile bool refreshPending_ = false;
+    volatile bool hostChangedPending_ = false;
     volatile bool desiredFilm_ = false;
     volatile uint8_t desiredBrightness_ = 200;
     volatile float desiredRadius_ = 3.5f;
