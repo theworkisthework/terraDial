@@ -174,11 +174,12 @@ namespace
     const int HEAD_LINES = 2;
     const int COPY_LEAD = 3;
 
-    enum class Phase : uint8_t { Lift, AwaitHoming, AwaitHomed, Stream };
+    enum class Phase : uint8_t { Lift, AwaitHoming, AwaitHomed, Stream, Drain };
     const uint32_t LIFT_SETTLE_MS = 500;
     const uint32_t LIFT_TIMEOUT_MS = 8000;
     const uint32_t HOMING_START_TIMEOUT_MS = 10000;
     const uint32_t HOMING_DONE_TIMEOUT_MS = 180000;
+    const uint32_t DRAIN_SETTLE_MS = 1000; // for a status report to show the planner's still moving
 
     struct Plot
     {
@@ -347,6 +348,7 @@ namespace
                 return false;
 
             case Phase::Stream:
+            case Phase::Drain:
                 return true;
         }
         return false;
@@ -387,8 +389,16 @@ namespace
 
         if (plot.next >= plot.total)
         {
-            plot.active = false;
-            setResult("Done");
+            // Every line is acknowledged, but "ok" only means FluidNC took
+            // it: the planner can still be drawing the last segments and
+            // the final pen-up. Done when the machine says it's idle.
+            if (plot.phase != Phase::Drain) setPhase(Phase::Drain);
+            else if (millis() - plot.phaseAt >= DRAIN_SETTLE_MS &&
+                     (st.mode == MachineMode::Idle || st.mode == MachineMode::Done))
+            {
+                plot.active = false;
+                setResult("Done");
+            }
             return;
         }
 

@@ -416,7 +416,7 @@ void loop()
     panelRing.setMode(fluidNC.status().mode);
     // FluidNC calls a jog and a plot the same thing (Run); this is the half
     // of the distinction the ring can't work out for itself.
-    panelRing.setPlotting(fluidNC.status().jobActive);
+    panelRing.setPlotting(fluidNC.status().jobActive || uiSpiroPlotActive());
     // An on-screen ring with the screen asleep is animating for nobody --
     // and every frame of it is a redraw and a panel write. LEDs stay lit
     // through sleep on purpose, so the CrowPanel's carries on.

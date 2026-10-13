@@ -175,7 +175,7 @@ void PanelRing::render()
             strip.setBrightness(userBright);
             for (int i = 0; i < LED_RING_COUNT; i++)
             {
-                uint8_t v = sin8t((i * (256 / LED_RING_COUNT)) + (t / 24)); // one wave spread evenly round the ring (51 apart on 5 LEDs)
+                uint8_t v = sin8t((i * 256 / LED_RING_COUNT) + (t / 24)); // one wave spread evenly round the ring (51 apart on 5 LEDs)
                 strip.setPixelColor(i, 40 + (v >> 2), 22 + (v >> 3), 4);
             }
             break;
