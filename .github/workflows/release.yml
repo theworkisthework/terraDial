@@ -23,12 +23,23 @@ on:
 permissions:
   contents: write # create the release
 
-env:
-  PIO_ENV: crowpanel-1_28-rotary
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # ota/factory names: BOARD_OTA_ASSET_NAME in include/boards/*.h
+          # has to keep matching the ota one. The CrowPanel keeps the
+          # original unsuffixed names.
+          - env: crowpanel-1_28-rotary
+            ota: terradial-ota.bin
+            factory: terradial-factory.bin
+          - env: waveshare-knob-1_8
+            ota: terradial-knob18-ota.bin
+            factory: terradial-knob18-factory.bin
+    env:
+      PIO_ENV: ${{ matrix.env }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,7 +59,7 @@ jobs:
           path: |
             ~/.platformio
             ~/.cache/pip
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          key: pio-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
 
       - name: Install PlatformIO and esptool
         run: pip install --upgrade platformio esptool
@@ -70,7 +81,7 @@ jobs:
           # The app image, exactly as it lands in app0/app1. This is what
           # the on-device updater downloads -- OTA_ASSET_NAME in
           # src/net/ota_updater.h has to keep matching this filename.
-          cp "$BUILD/firmware.bin" dist/terradial-ota.bin
+          cp "$BUILD/firmware.bin" "dist/${{ matrix.ota }}"
 
           # boot_app0.bin lives in the Arduino framework package, not the
           # build directory, and its path carries the package version.
@@ -83,7 +94,7 @@ jobs:
           # built them into the bootloader header, so the merged image
           # boots identically to a `pio run -t upload`.
           esptool.py --chip esp32s3 merge_bin \
-            -o dist/terradial-factory.bin \
+            -o "dist/${{ matrix.factory }}" \
             --flash_mode keep --flash_freq keep --flash_size keep \
             0x0     "$BUILD/bootloader.bin" \
             0x8000  "$BUILD/partitions.bin" \
@@ -109,5 +120,5 @@ jobs:
           # suffixed tags out of `latest` means it never has to.
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            dist/terradial-ota.bin
-            dist/terradial-factory.bin
+            dist/${{ matrix.ota }}
+            dist/${{ matrix.factory }}
