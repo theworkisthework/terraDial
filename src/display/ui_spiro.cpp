@@ -50,7 +50,9 @@ namespace
 
     // How finely the curve is cut up. Enough points per trip round the ring
     // to look smooth, but capped overall: a dense curve can need a hundred
-    // trips, and every point becomes a line of G-code.
+    // trips, and every point becomes a line of G-code. A hard cap -- the
+    // densest the chips allow (gear 139 in ring 140, x6) still gets 3
+    // points a trip.
     const int MAX_POINTS = 3000;
 
     int gcd(int a, int b)
@@ -103,7 +105,7 @@ namespace
         curve.copies = params[P_COPIES].value;
         int perTurn = MAX_POINTS / (curve.copies * curve.turns);
         if (perTurn > 240) perTurn = 240;
-        if (perTurn < 12) perTurn = 12;
+        if (perTurn < 1) perTurn = 1;
         curve.perCopy = curve.turns * perTurn;
         curve.reach = curve.c + curve.pen;
         curve.frame = frameFor(curve.pen);
@@ -275,6 +277,11 @@ namespace
     {
         const FluidNCStatus &st = fluidNC.status();
         if (!st.connected) return "Not connected to the plotter";
+        // Blank pen commands are skipped when streamed, so without these the
+        // plot would home, draw the whole thing in the air and say "Done".
+        const AppSettings &cfg = Config::get();
+        if (!cfg.penUpCmd[0]) return "Set a pen-up command in Settings";
+        if (!cfg.penDownCmd[0]) return "Set a pen-down command in Settings";
         // Done is the few seconds of celebration after a job: idle really.
         if (st.jobActive || (st.mode != MachineMode::Idle && st.mode != MachineMode::Done &&
                              st.mode != MachineMode::Alarm))
@@ -437,7 +444,11 @@ namespace
             switch (fluidNC.ackState(plot.ticket))
             {
                 case FluidNCClient::AckState::Pending:
-                    if (millis() - plot.ticketAt > ACK_TIMEOUT_MS) abortPlot("Stopped: no reply from the plotter");
+                    // Paused (feed hold): the planner is full and won't ack
+                    // until it's resumed, however long that takes -- that's
+                    // the user swapping a pen, not the plotter gone quiet.
+                    if (st.mode == MachineMode::Hold) plot.ticketAt = millis();
+                    else if (millis() - plot.ticketAt > ACK_TIMEOUT_MS) abortPlot("Stopped: no reply from the plotter");
                     return;
                 case FluidNCClient::AckState::Ok:
                     plot.ticket = 0;
@@ -507,6 +518,7 @@ namespace
     lv_obj_t *plotBox = nullptr;
     lv_obj_t *plotLbl = nullptr;
     lv_obj_t *plotBar = nullptr;
+    lv_obj_t *stopBtn = nullptr;
 
     // Preview animation: draws the curve a chunk per frame, so it appears
     // the way it would on paper.
@@ -790,7 +802,16 @@ namespace
         lv_obj_move_foreground(confirmBox);
     }
 
-    void stopCb(lv_event_t *) { abortPlot("Stopped"); }
+    // Once the drawing is done and the machine is re-homing, a soft reset
+    // would only alarm it mid-$H and lose home -- there's nothing left to
+    // stop. The button is hidden then too (refreshPlotUi).
+    bool rehoming() { return plot.active && plot.phase > Phase::AwaitDrawn; }
+
+    void stopCb(lv_event_t *)
+    {
+        if (rehoming()) return;
+        abortPlot("Stopped");
+    }
 
     lv_obj_t *makeOverlay()
     {
@@ -882,9 +903,9 @@ namespace
         lv_obj_set_style_bg_color(plotBar, Palette::bgPanel(), LV_PART_MAIN);
         lv_obj_set_style_bg_color(plotBar, Palette::accent(), LV_PART_INDICATOR);
 
-        lv_obj_t *stop = makeRoundBtn(plotBox, LUCIDE_SQUARE " Stop", Palette::alert(), px(84));
-        lv_obj_set_style_text_font(lv_obj_get_child(stop, 0), &UI_ICONS_12, 0);
-        lv_obj_add_event_cb(stop, stopCb, LV_EVENT_CLICKED, nullptr);
+        stopBtn = makeRoundBtn(plotBox, LUCIDE_SQUARE " Stop", Palette::alert(), px(84));
+        lv_obj_set_style_text_font(lv_obj_get_child(stopBtn, 0), &UI_ICONS_12, 0);
+        lv_obj_add_event_cb(stopBtn, stopCb, LV_EVENT_CLICKED, nullptr);
     }
 
     // Swaps the bottom of the screen between the settings chips and the
@@ -907,6 +928,8 @@ namespace
         lv_obj_set_style_opa(plotBtn, plot.active ? LV_OPA_40 : LV_OPA_COVER, 0);
         lv_obj_set_style_opa(modeBtn, plot.active ? LV_OPA_40 : LV_OPA_COVER, 0);
         if (!busy) return;
+        if (plot.active && !rehoming()) lv_obj_clear_flag(stopBtn, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(stopBtn, LV_OBJ_FLAG_HIDDEN);
 
         char buf[56];
         if (plot.active && plot.phase > Phase::Stream)
@@ -922,7 +945,8 @@ namespace
         else if (plot.active)
         {
             int pct = plot.total ? plot.next * 100 / plot.total : 0;
-            snprintf(buf, sizeof(buf), "Plotting  %d%%", pct);
+            bool held = fluidNC.status().mode == MachineMode::Hold;
+            snprintf(buf, sizeof(buf), "%s  %d%%", held ? "Paused" : "Plotting", pct);
             lv_bar_set_value(plotBar, plot.total ? plot.next * 1000 / plot.total : 0, LV_ANIM_OFF);
             int g = linePoint(plot.next);
             if (g >= 0 && drawnTo >= totalPoints()) placeToy(g);
