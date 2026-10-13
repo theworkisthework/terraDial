@@ -7,6 +7,7 @@
 #include <HTTPUpdate.h>
 #include <ArduinoJson.h>
 #include <string.h>
+#include <Preferences.h>
 
 #include "branding.h"
 #include "version.h"
@@ -26,6 +27,11 @@ namespace
     char latestVersion_[24] = "";
     char downloadUrl_[256] = "";
     char message_[96] = "";
+
+    // Survives the reboot so the new firmware can announce itself.
+    const char *OTA_NVS_NS = "terraota";
+    const char *OTA_NVS_KEY = "justTo";
+    char justUpdated_[24] = "";
 
     void setMessage(const char *m)
     {
@@ -255,11 +261,19 @@ namespace
         switch (ret)
         {
             case HTTP_UPDATE_OK:
+            {
+                Preferences p;
+                if (p.begin(OTA_NVS_NS, false))
+                {
+                    p.putString(OTA_NVS_KEY, latestVersion_);
+                    p.end();
+                }
                 progressPct_ = 100;
                 setMessage("Installed -- restarting");
                 state_ = OtaUpdater::State::Done;
                 restartPending_ = true;
                 break;
+            }
 
             case HTTP_UPDATE_NO_UPDATES:
                 // Only reachable if the server declined the request; the
@@ -322,4 +336,23 @@ namespace OtaUpdater
     const char *latestVersion() { return latestVersion_; }
     const char *message() { return message_; }
     bool restartPending() { return restartPending_; }
+
+    const char *takeJustUpdated()
+    {
+        justUpdated_[0] = '\0';
+        Preferences p;
+        if (!p.begin(OTA_NVS_NS, false)) return justUpdated_;
+        String to = p.getString(OTA_NVS_KEY, "");
+        if (to.length())
+        {
+            p.remove(OTA_NVS_KEY);
+            if (versionRank(to.c_str()) == versionRank(Version::firmware()))
+            {
+                strncpy(justUpdated_, to.c_str(), sizeof(justUpdated_) - 1);
+                justUpdated_[sizeof(justUpdated_) - 1] = '\0';
+            }
+        }
+        p.end();
+        return justUpdated_;
+    }
 }

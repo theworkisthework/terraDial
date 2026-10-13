@@ -333,7 +333,7 @@ void setup()
 
     // The mark draws itself over the dial while Wi-Fi and FluidNC connect
     // underneath, then clears away; a touch or a turn skips it.
-    UiBrand::showSplash();
+    UiBrand::showSplash(OtaUpdater::takeJustUpdated());
 
     Serial.println("terraDial stage-2 bring-up ready");
 }
