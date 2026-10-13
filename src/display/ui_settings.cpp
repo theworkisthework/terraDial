@@ -959,6 +959,7 @@ else if (WiFi.status() != WL_CONNECTED)
     lv_obj_t *updateBtnLbl = nullptr;
     lv_obj_t *updateStatusLbl = nullptr;
     lv_obj_t *updateBar = nullptr;
+    lv_obj_t *updateWarnLbl = nullptr;
 
     void updateBtnCb(lv_event_t *e)
     {
@@ -1028,6 +1029,13 @@ else if (WiFi.status() != WL_CONNECTED)
             updateStatusLbl,
             st == OtaUpdater::State::Failed ? Palette::accent() : Palette::textMuted(), 0);
 
+        // Shown from the moment an install is on offer, so it's read before
+        // the tap, and stays up while flashing.
+        bool warn = st == OtaUpdater::State::Available || st == OtaUpdater::State::Installing ||
+                    st == OtaUpdater::State::Done;
+        if (warn) lv_obj_clear_flag(updateWarnLbl, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(updateWarnLbl, LV_OBJ_FLAG_HIDDEN);
+
         if (st == OtaUpdater::State::Installing)
         {
             lv_obj_clear_flag(updateBar, LV_OBJ_FLAG_HIDDEN);
@@ -1055,6 +1063,17 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_label_set_text(updateStatusLbl, "");
         lv_obj_set_style_text_font(updateStatusLbl, &UI_FONT_12, 0);
         lv_obj_set_style_text_color(updateStatusLbl, Palette::textMuted(), 0);
+
+        updateWarnLbl = lv_label_create(card);
+        lv_obj_set_width(updateWarnLbl, lv_pct(100));
+        lv_label_set_long_mode(updateWarnLbl, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_align(updateWarnLbl, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(updateWarnLbl,
+                          "Needs 50%+ battery, or plug in. Keep Wi-Fi on, don't touch "
+                          "the dial or cut power until it restarts.");
+        lv_obj_set_style_text_font(updateWarnLbl, &UI_FONT_12, 0);
+        lv_obj_set_style_text_color(updateWarnLbl, Palette::accent(), 0);
+        lv_obj_add_flag(updateWarnLbl, LV_OBJ_FLAG_HIDDEN);
 
         updateBar = lv_bar_create(card);
         lv_obj_set_size(updateBar, lv_pct(100), px(8));

@@ -233,6 +233,11 @@ Two deliberate limits:
   that pumps FluidNC's WebSocket, for a minute or more, and the reboot at the
   end drops the connection outright. Mid-plot is the worst possible moment for
   both, so it says "Machine busy" and does nothing.
+- **It refuses on a low battery.** On a battery-powered board (the Waveshare
+  Knob) an install needs at least 50% charge, or USB power. The panel also
+  shows a warning before and during the install: keep Wi-Fi on, don't touch the
+  dial and don't cut power until it restarts. Both displays stay awake for the
+  whole install, whatever the sleep and idle-logo settings say.
 - **A dev build is always offered the release.** A build from a working copy
   carries the version `dev`, which has no place in the ordering — see
   `include/version.h`. If you're testing local firmware, don't press the button.

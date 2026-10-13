@@ -11,6 +11,7 @@
 #include "branding.h"
 #include "version.h"
 #include "fluidnc_client.h"
+#include "../power/battery.h"
 
 namespace
 {
@@ -201,6 +202,12 @@ namespace
         progressPct_ = pct;
     }
 
+    // Losing power mid-flash is survivable (the running slot is untouched)
+    // but wastes the download and leaves the user with a failed update. On
+    // battery, insist on a decent charge first; on USB the level can't be
+    // read and isn't needed.
+    const uint8_t MIN_BATTERY_PCT = 50;
+
     void doInstall()
     {
         if (!downloadUrl_[0])
@@ -219,6 +226,16 @@ namespace
             st.mode == MachineMode::Hold)
         {
             fail("Machine busy -- try when idle");
+            return;
+        }
+
+        const BatteryStatus &batt = Battery::status();
+        if (batt.present && !batt.external && batt.percent < MIN_BATTERY_PCT)
+        {
+            char m[64];
+            snprintf(m, sizeof(m), "Battery %u%% -- need %u%%+. Charge or plug in",
+                     (unsigned)batt.percent, (unsigned)MIN_BATTERY_PCT);
+            fail(m);
             return;
         }
 
