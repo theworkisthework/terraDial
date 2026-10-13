@@ -1,4 +1,5 @@
 #include "ui_nav.h"
+#include "ui_scale.h"
 #include <lvgl.h>
 #include "ui_dial.h"
 #include "ui_jog.h"
@@ -11,6 +12,7 @@
 #include "ui_estop.h"
 #include "ui_alarm_clear.h"
 #include "ui_park.h"
+#include "ui_spiro.h"
 #include "../input/encoder.h"
 #include "radial_keyboard.h"
 #include "screen_sleep.h"
@@ -20,7 +22,7 @@
 
 namespace
 {
-    const int SCREEN_COUNT = 11;
+    const int SCREEN_COUNT = 12;
     const int DIAL_SCREEN_INDEX = 0;
     const int JOG_SCREEN_INDEX = 1;
     const int FILES_SCREEN_INDEX = 2;
@@ -32,6 +34,7 @@ namespace
     const int ESTOP_SCREEN_INDEX = 8;
     const int ALARM_CLEAR_SCREEN_INDEX = 9;
     const int PARK_SCREEN_INDEX = 10;
+    const int SPIRO_SCREEN_INDEX = 11; // the easter egg -- no dial slot
 
     lv_obj_t *screens[SCREEN_COUNT];
     int currentIndex = DIAL_SCREEN_INDEX;
@@ -57,6 +60,7 @@ namespace
 
         if (currentIndex == FILES_SCREEN_INDEX) uiFilesSetFocused(true);
         if (currentIndex == LIGHTS_SCREEN_INDEX) uiLightsOnShow();
+        if (currentIndex == SPIRO_SCREEN_INDEX) uiSpiroOnShow();
 
         // Walking into Progress on a live job re-arms the flag that the
         // walk *out* cleared, so the job still hands the screen back to the
@@ -189,6 +193,7 @@ namespace UiNav
         screens[ESTOP_SCREEN_INDEX] = uiEstopCreate();
         screens[ALARM_CLEAR_SCREEN_INDEX] = uiAlarmClearCreate();
         screens[PARK_SCREEN_INDEX] = uiParkCreate();
+        screens[SPIRO_SCREEN_INDEX] = uiSpiroCreate();
 
         uiDialSetHandlers(onDialOpen, onDialStatusTap);
 
@@ -374,6 +379,16 @@ namespace UiNav
             return;
         }
 
+        // The spirograph: the knob turns the selected gear setting. Raw
+        // delta, like Jog -- clockwise makes the number go up whatever the
+        // menu direction preference says.
+        if (currentIndex == SPIRO_SCREEN_INDEX)
+        {
+            if (delta != 0) uiSpiroHandleRotate(delta);
+            if (ev == ButtonEvent::LongPress) goTo(DIAL_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
+            return;
+        }
+
         // Defensive default -- every screen above handles itself, but a new
         // one added without a case still gets the universal back gesture.
         if (ev == ButtonEvent::LongPress) goTo(DIAL_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
@@ -390,6 +405,11 @@ namespace UiNav
     void goEstop()
     {
         goTo(ESTOP_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
+    }
+
+    void goSpiro()
+    {
+        goTo(SPIRO_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
     }
 
     bool isOnDial() { return currentIndex == DIAL_SCREEN_INDEX; }

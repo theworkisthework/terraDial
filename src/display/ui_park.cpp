@@ -1,4 +1,5 @@
 #include "ui_park.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "../net/fluidnc_client.h"
 #include "machine_extents.h"
@@ -108,41 +109,41 @@ lv_obj_t *uiParkCreate()
     // copy here is a single line where Home's is two.
     lv_obj_t *iconLbl = lv_label_create(scr);
     lv_label_set_text(iconLbl, LUCIDE_CAMERA); // matches this item's dial icon
-    lv_obj_set_style_text_font(iconLbl, &lucide_24, 0);
+    lv_obj_set_style_text_font(iconLbl, &UI_ICONS_24, 0);
     lv_obj_set_style_text_color(iconLbl, Palette::accent(), 0);
-    lv_obj_align(iconLbl, LV_ALIGN_CENTER, 0, -58);
+    lv_obj_align(iconLbl, LV_ALIGN_CENTER, 0, px(-58));
 
     lv_obj_t *titleLbl = lv_label_create(scr);
     lv_label_set_text(titleLbl, "Park for photo");
-    lv_obj_set_style_text_font(titleLbl, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(titleLbl, &UI_FONT_16, 0);
     lv_obj_set_style_text_color(titleLbl, lv_color_white(), 0);
-    lv_obj_align(titleLbl, LV_ALIGN_CENTER, 0, -28);
+    lv_obj_align(titleLbl, LV_ALIGN_CENTER, 0, px(-28));
 
     lv_obj_t *bodyLbl = lv_label_create(scr);
     lv_label_set_text(bodyLbl, "Pen up, home, then out to Y max.");
     lv_obj_set_style_text_align(bodyLbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(bodyLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(bodyLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(bodyLbl, Palette::textMuted(), 0);
-    lv_obj_align(bodyLbl, LV_ALIGN_CENTER, 0, -6);
+    lv_obj_align(bodyLbl, LV_ALIGN_CENTER, 0, px(-6));
 
     // The sequence outlasts this screen and is slow enough to look hung.
     // Without a running commentary, "homing" and "wedged" are the same
     // picture: a machine not visibly doing anything.
     statusLbl = lv_label_create(scr);
     lv_label_set_text(statusLbl, "");
-    lv_obj_set_style_text_font(statusLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(statusLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(statusLbl, Palette::accent(), 0);
-    lv_obj_align(statusLbl, LV_ALIGN_CENTER, 0, 14);
+    lv_obj_align(statusLbl, LV_ALIGN_CENTER, 0, px(14));
 
     lv_obj_t *btn = lv_btn_create(scr);
-    lv_obj_set_size(btn, 160, 38);
+    lv_obj_set_size(btn, px(160), px(38));
     lv_obj_set_style_bg_color(btn, Palette::accent(), 0);
-    lv_obj_set_style_radius(btn, 19, 0);
-    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, -64);
+    lv_obj_set_style_radius(btn, px(19), 0);
+    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, px(-64));
     lv_obj_add_event_cb(btn, confirmBtnCb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *btnLbl = lv_label_create(btn);
     lv_label_set_text(btnLbl, "Confirm & park");
-    lv_obj_set_style_text_font(btnLbl, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(btnLbl, &UI_FONT_14, 0);
     lv_obj_set_style_text_color(btnLbl, Palette::accentFg(), 0);
     lv_obj_center(btnLbl);
 

@@ -107,7 +107,7 @@ public:
     void home();                                       // $X (if alarmed) then $H
     void jog(char axis, float deltaMm, float feedrate); // $J=G91 G21 <axis><delta> F<feed>
     void clearAlarm();                                  // $X
-    // `path` is relative to the SD root, e.g. "drawings/snowflake.gcode".
+    // `path` is relative to the SD root, e.g. "drawings/refraction.gcode".
     // Both return false, and send nothing, if the command would be longer
     // than FluidNC accepts -- see runPathFits().
     bool runFile(const char *path);                     // $SD/Run=<path>

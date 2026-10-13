@@ -1,4 +1,5 @@
 #include "ui_jog.h"
+#include "ui_scale.h"
 #include "jog_config.h"
 #include "palette.h"
 #include "ui_screen_shell.h"
@@ -100,29 +101,29 @@ lv_obj_t *uiJogCreate()
     lv_obj_set_style_border_width(axisRow, 0, 0);
     lv_obj_clear_flag(axisRow, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(axisRow, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(axisRow, 6, 0);
-    lv_obj_align(axisRow, LV_ALIGN_TOP_MID, 0, 32);
+    lv_obj_set_style_pad_column(axisRow, px(6), 0);
+    lv_obj_align(axisRow, LV_ALIGN_TOP_MID, 0, px(32));
 
     for (int i = 0; i < AXIS_COUNT; i++)
     {
         lv_obj_t *chip = lv_obj_create(axisRow);
-        lv_obj_set_size(chip, 34, 26);
-        lv_obj_set_style_radius(chip, 13, 0);
+        lv_obj_set_size(chip, px(34), px(26));
+        lv_obj_set_style_radius(chip, px(13), 0);
         lv_obj_set_style_border_width(chip, 0, 0);
         lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_event_cb(chip, axisChipCb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
         lv_obj_t *lbl = lv_label_create(chip);
         lv_label_set_text(lbl, AXIS_NAMES[i]);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(lbl, &UI_FONT_14, 0);
         lv_obj_center(lbl);
         axisChips[i] = chip;
         axisChipLbls[i] = lbl;
     }
 
     posLabel = lv_label_create(scr);
-    lv_obj_set_style_text_font(posLabel, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(posLabel, &UI_FONT_32, 0);
     lv_obj_set_style_text_color(posLabel, Palette::text(), 0);
-    lv_obj_align(posLabel, LV_ALIGN_CENTER, 0, -30);
+    lv_obj_align(posLabel, LV_ALIGN_CENTER, 0, px(-30));
     lv_label_set_text(posLabel, "--");
 
     // No "X position" caption under the readout: the highlighted axis chip
@@ -134,16 +135,16 @@ lv_obj_t *uiJogCreate()
     // Label updates with the axis (see restyleChips) so it always states
     // exactly what it will do.
     setZeroBtn = lv_btn_create(scr);
-    lv_obj_set_size(setZeroBtn, 92, 24);
-    lv_obj_set_style_radius(setZeroBtn, 12, 0);
+    lv_obj_set_size(setZeroBtn, px(92), px(24));
+    lv_obj_set_style_radius(setZeroBtn, px(12), 0);
     lv_obj_set_style_bg_color(setZeroBtn, Palette::bgSecondary(), 0);
     lv_obj_set_style_bg_color(setZeroBtn, Palette::accent(), LV_STATE_PRESSED);
     lv_obj_set_style_shadow_width(setZeroBtn, 0, 0);
-    lv_obj_set_ext_click_area(setZeroBtn, 6);
-    lv_obj_align(setZeroBtn, LV_ALIGN_CENTER, 0, 10);
+    lv_obj_set_ext_click_area(setZeroBtn, px(6));
+    lv_obj_align(setZeroBtn, LV_ALIGN_CENTER, 0, px(10));
     lv_obj_add_event_cb(setZeroBtn, setZeroCb, LV_EVENT_CLICKED, NULL);
     setZeroLbl = lv_label_create(setZeroBtn);
-    lv_obj_set_style_text_font(setZeroLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(setZeroLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(setZeroLbl, Palette::textMuted(), 0);
     lv_obj_center(setZeroLbl);
 
@@ -153,8 +154,8 @@ lv_obj_t *uiJogCreate()
     lv_obj_set_style_border_width(stepRow, 0, 0);
     lv_obj_clear_flag(stepRow, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(stepRow, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(stepRow, 6, 0);
-    lv_obj_align(stepRow, LV_ALIGN_BOTTOM_MID, 0, -52); // clears the Set Zero button above
+    lv_obj_set_style_pad_column(stepRow, px(6), 0);
+    lv_obj_align(stepRow, LV_ALIGN_BOTTOM_MID, 0, px(-52)); // clears the Set Zero button above
 
     for (int i = 0; i < JOG_STEP_COUNT; i++)
     {
@@ -164,8 +165,8 @@ lv_obj_t *uiJogCreate()
         // usable width down here is ~197px. 40px chips (178px) would have
         // fitted, but with the corners inside 10px of the glass -- 36 keeps a
         // visible margin, and "100" still has room at font 12.
-        lv_obj_set_size(chip, 36, 28);
-        lv_obj_set_style_radius(chip, 14, 0);
+        lv_obj_set_size(chip, px(36), px(28));
+        lv_obj_set_style_radius(chip, px(14), 0);
         lv_obj_set_style_border_width(chip, 0, 0);
         lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_event_cb(chip, stepChipCb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
@@ -174,7 +175,7 @@ lv_obj_t *uiJogCreate()
         if (JOG_STEPS[i].mm < 1.0f) snprintf(buf, sizeof(buf), "%.1f", JOG_STEPS[i].mm);
         else snprintf(buf, sizeof(buf), "%.0f", JOG_STEPS[i].mm);
         lv_label_set_text(lbl, buf);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(lbl, &UI_FONT_12, 0);
         lv_obj_center(lbl);
         stepChips[i] = chip;
         stepChipLbls[i] = lbl;

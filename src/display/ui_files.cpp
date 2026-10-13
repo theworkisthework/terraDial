@@ -1,4 +1,5 @@
 #include "ui_files.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "../net/fluidnc_client.h"
 #include "radial_ring.h"
@@ -6,6 +7,7 @@
 #include "ui_screen_shell.h"
 #include "ui_widgets.h"
 #include "ui_nav.h"
+#include "../config/settings.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -35,9 +37,9 @@ namespace
     //
     // 60 at radius 80 leaves the selected chip 2px clear of the 96px hub,
     // which is what caps the near size here.
-    const lv_coord_t RING_RADIUS = 80;
-    const lv_coord_t RING_SIZE_NEAR = 60;
-    const lv_coord_t RING_SIZE_FAR = 20;
+    const lv_coord_t RING_RADIUS = px(80);
+    const lv_coord_t RING_SIZE_NEAR = px(60);
+    const lv_coord_t RING_SIZE_FAR = px(20);
     const float RING_SPREAD = 0.55f;
 
     // The arc below: 30-degree pitch, +/-132 degrees. At most
@@ -60,6 +62,23 @@ namespace
     // leading or trailing slash -- "" is the root.
     char curDir[SD_DIR_MAX] = "";
     char selectedPath[PATH_BUF] = {0};
+
+    // The spirograph (ui_spiro.h) rides along as the first entry at the SD
+    // root, unless it's been moved out to Settings > About. Ring index i is
+    // then file i - spiroSlots(); every place that turns a ring index into
+    // a file goes through fileAt() so the two can't drift.
+    int spiroSlots() { return (!curDir[0] && Config::get().spiroInJobs) ? 1 : 0; }
+    bool isSpiro(int index) { return index < spiroSlots(); }
+    bool fileAt(int index, FluidNCFileEntry &out) { return fluidNC.fileListEntry(index - spiroSlots(), out); }
+
+    // Files in the list we have, if it's for the folder we're in -- a list
+    // for a folder since left counts as nothing yet.
+    int filesHere()
+    {
+        char dir[SD_DIR_MAX];
+        fluidNC.fileListDir(dir, sizeof(dir));
+        return strcmp(dir, curDir) == 0 ? fluidNC.fileListCount() : 0;
+    }
 
     // dir + "/" + name, or just name at the root. False if it won't fit.
     bool joinPath(char *out, size_t outSize, const char *dir, const char *name)
@@ -99,8 +118,15 @@ namespace
 
     void refreshHub(int index)
     {
+        if (isSpiro(index))
+        {
+            lv_label_set_text(hubNameLbl, "Spirograph");
+            lv_label_set_text(hubMetaLbl, "Make a drawing");
+            lv_label_set_text(hubActionLbl, LUCIDE_DRAFTING_COMPASS " Open");
+            return;
+        }
         FluidNCFileEntry entry;
-        if (!fluidNC.fileListEntry(index, entry))
+        if (!fileAt(index, entry))
         {
             showEmptyHub();
             return;
@@ -134,8 +160,10 @@ namespace
         curDir[sizeof(curDir) - 1] = '\0';
         // Clear the old folder's entries straight away, so nothing on
         // screen can be opened against a list that's about to be replaced.
-        ring.setCount(0);
-        showLoadingHub();
+        // (The spirograph needs no list, so at the root it stays.)
+        ring.setCount(spiroSlots());
+        if (spiroSlots()) refreshHub(0);
+        else showLoadingHub();
         fluidNC.requestFileList(curDir);
     }
 
@@ -179,7 +207,7 @@ namespace
         // One scrolling line, like the hub: a long name wrapped over
         // several lines would push the buttons off the round panel.
         lv_obj_t *text = lv_msgbox_get_text(mbox);
-        lv_obj_set_width(text, 170);
+        lv_obj_set_width(text, px(170));
         lv_label_set_long_mode(text, LV_LABEL_LONG_SCROLL_CIRCULAR);
         lv_obj_center(mbox);
         lv_obj_add_event_cb(mbox, confirmCb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -218,12 +246,12 @@ namespace
         lv_obj_set_style_bg_opa(chip, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(chip, LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_border_width(chip, 0, 0);
-        lv_obj_set_style_shadow_width(chip, 12, 0);
+        lv_obj_set_style_shadow_width(chip, px(12), 0);
         lv_obj_set_style_shadow_color(chip, lv_color_black(), 0);
         lv_obj_set_style_shadow_opa(chip, LV_OPA_30, 0);
         lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_pad_all(chip, 0, 0);
-        lv_obj_set_ext_click_area(chip, 10);
+        lv_obj_set_ext_click_area(chip, px(10));
 
         lv_obj_t *icon = lv_label_create(chip);
         lv_label_set_text(icon, LUCIDE_FILE);
@@ -241,14 +269,19 @@ namespace
     {
         lv_obj_t *icon = lv_obj_get_child(chip, 0);
         if (!icon) return;
+        if (isSpiro(index))
+        {
+            lv_label_set_text(icon, LUCIDE_DRAFTING_COMPASS);
+            return;
+        }
         FluidNCFileEntry entry;
-        bool isDir = fluidNC.fileListEntry(index, entry) && entry.isDir;
+        bool isDir = fileAt(index, entry) && entry.isDir;
         lv_label_set_text(icon, isDir ? LUCIDE_FOLDER : LUCIDE_FILE);
     }
 
     void rebuildList()
     {
-        int count = fluidNC.fileListCount();
+        int count = filesHere() + spiroSlots();
         ring.setCount(count);
         if (count == 0) showEmptyHub();
         else refreshHub(ring.selectedIndex());
@@ -256,8 +289,13 @@ namespace
 
     void onCardOpen(int index)
     {
+        if (isSpiro(index))
+        {
+            UiNav::goSpiro();
+            return;
+        }
         FluidNCFileEntry entry;
-        if (!fluidNC.fileListEntry(index, entry)) return;
+        if (!fileAt(index, entry)) return;
         char path[PATH_BUF];
         if (!joinPath(path, sizeof(path), curDir, entry.name)) return;
         if (entry.isDir) openFolder(path);
@@ -279,13 +317,13 @@ lv_obj_t *uiFilesCreate()
     // Centre hub: the one place a filename is readable, and the run button.
     // Slightly larger than the dial's hub because filenames need the width.
     lv_obj_t *hub = lv_obj_create(screenRoot);
-    lv_obj_set_size(hub, 96, 96);
+    lv_obj_set_size(hub, px(96), px(96));
     lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(hub, Palette::bgSecondary(), 0);
     lv_obj_set_style_bg_color(hub, Palette::accentHover(), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(hub, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(hub, Palette::border(), 0);
-    lv_obj_set_style_border_width(hub, 1, 0);
+    lv_obj_set_style_border_width(hub, px(1), 0);
     lv_obj_set_style_pad_all(hub, 0, 0);
     lv_obj_clear_flag(hub, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(hub, LV_OBJ_FLAG_CLICKABLE);
@@ -293,7 +331,7 @@ lv_obj_t *uiFilesCreate()
     lv_obj_align(hub, LV_ALIGN_CENTER, 0, 0);
 
     hubNameLbl = lv_label_create(hub);
-    lv_obj_set_width(hubNameLbl, 82);
+    lv_obj_set_width(hubNameLbl, px(82));
     // Scrolls, rather than ellipsising. 82px holds roughly a dozen characters
     // and plotter files are routinely named by layer -- "drawing 1", "drawing
     // 2", "drawing 3" -- so the digit that tells them apart is the character
@@ -306,19 +344,19 @@ lv_obj_t *uiFilesCreate()
     // animates when the text actually overflows, so short names sit still.
     lv_label_set_long_mode(hubNameLbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_align(hubNameLbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(hubNameLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(hubNameLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(hubNameLbl, Palette::text(), 0);
-    lv_obj_align(hubNameLbl, LV_ALIGN_CENTER, 0, -18);
+    lv_obj_align(hubNameLbl, LV_ALIGN_CENTER, 0, px(-18));
 
     hubMetaLbl = lv_label_create(hub);
-    lv_obj_set_style_text_font(hubMetaLbl, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(hubMetaLbl, &UI_FONT_12, 0);
     lv_obj_set_style_text_color(hubMetaLbl, Palette::textMuted(), 0);
-    lv_obj_align(hubMetaLbl, LV_ALIGN_CENTER, 0, 4);
+    lv_obj_align(hubMetaLbl, LV_ALIGN_CENTER, 0, px(4));
 
     hubActionLbl = lv_label_create(hub);
-    lv_obj_set_style_text_font(hubActionLbl, &lucide_12, 0); // icon + word
+    lv_obj_set_style_text_font(hubActionLbl, &UI_ICONS_12, 0); // icon + word
     lv_obj_set_style_text_color(hubActionLbl, Palette::accent(), 0);
-    lv_obj_align(hubActionLbl, LV_ALIGN_CENTER, 0, 24);
+    lv_obj_align(hubActionLbl, LV_ALIGN_CENTER, 0, px(24));
 
     // Arc layout rather than a full circle: 30-degree pitch, and nothing
     // drawn past +/-132 degrees. That empties the 5/6/7 o'clock arc so the
@@ -351,11 +389,16 @@ void uiFilesSetFocused(bool focused)
     // Refreshes whichever folder you were last in, rather than dropping
     // you back at the root every time you look away.
     if (!focused) return;
+    // Straight away from what's already here, so the spirograph entry
+    // follows its setting even while the plotter is out of reach.
+    rebuildList();
     fluidNC.requestFileList(curDir);
     // The fetch waits for a connection; until then, say why nothing's
     // coming rather than show "Loading..." indefinitely.
     if (!fluidNC.status().connected && ring.count() == 0) showHubMessage("Offline", "Can't reach plotter");
 }
+
+int uiFilesSpiroSlots() { return spiroSlots(); }
 
 bool uiFilesHandleBack()
 {
@@ -376,8 +419,9 @@ void uiFilesHandleSelect()
 
 void uiFilesHandleDoubleClick()
 {
+    if (isSpiro(ring.selectedIndex())) return; // nothing to run or delete
     FluidNCFileEntry entry;
-    if (!fluidNC.fileListEntry(ring.selectedIndex(), entry)) return;
+    if (!fileAt(ring.selectedIndex(), entry)) return;
     if (entry.isDir) return; // a folder has no Run/Delete
     openConfirmFor(entry);
 }

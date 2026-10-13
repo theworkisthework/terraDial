@@ -8,3 +8,6 @@ include/secrets.h
 # Working photos of the panel. The README's illustrations are generated
 # vectors in docs/screens/ -- this is the scratch pile they don't come from.
 shots/
+
+# Python bytecode (tools/gen_screens.py imports gen_logo.py)
+__pycache__/

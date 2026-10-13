@@ -1,4 +1,5 @@
 #include "radial_keyboard.h"
+#include "ui_scale.h"
 #include "lucide_icons.h"
 #include "palette.h"
 #include <math.h>
@@ -56,9 +57,9 @@ namespace
     // a pixel of where it sat at 18px (the bigger font's box carries more
     // descender space), and capitals still clear the glass. Pulling it in
     // made the selection visibly drop as it arrived at the top.
-    const lv_coord_t RADIUS = 100;
-    const lv_coord_t HUB_SIZE = 156;
-    const lv_coord_t TEXT_WIDTH = HUB_SIZE - 28; // the hub is round -- leave the text clear of its curve
+    const lv_coord_t RADIUS = px(100);
+    const lv_coord_t HUB_SIZE = px(156);
+    const lv_coord_t TEXT_WIDTH = HUB_SIZE - px(28); // the hub is round -- leave the text clear of its curve
 
     // Ring motion, matched to RadialRing (the home dial, Settings, Jobs) so
     // turning the knob feels the same everywhere: the selected key sits at
@@ -220,18 +221,18 @@ namespace
         bool sel = (i == selected);
         if (isWordKey(i))
         {
-            if (sel) return &lv_font_montserrat_24;
-            return nearness > 0.6f ? &lv_font_montserrat_14 : &lv_font_montserrat_12;
+            if (sel) return &UI_FONT_24;
+            return nearness > 0.6f ? &UI_FONT_14 : &UI_FONT_12;
         }
         if (isIconKey(i)) // LUCIDE_* glyphs, so Lucide fonts
         {
-            if (sel) return &lucide_24;
-            if (nearness > 0.6f) return &lucide_16;
-            return nearness > 0.3f ? &lucide_14 : &lucide_12;
+            if (sel) return &UI_ICONS_24;
+            if (nearness > 0.6f) return &UI_ICONS_16;
+            return nearness > 0.3f ? &UI_ICONS_14 : &UI_ICONS_12;
         }
-        if (sel) return &lv_font_montserrat_32;
-        if (nearness > 0.6f) return &lv_font_montserrat_18;
-        return nearness > 0.3f ? &lv_font_montserrat_14 : &lv_font_montserrat_12;
+        if (sel) return &UI_FONT_32;
+        if (nearness > 0.6f) return &UI_FONT_18;
+        return nearness > 0.3f ? &UI_FONT_14 : &UI_FONT_12;
     }
 
     void styleKey(int i, bool sel)
@@ -396,7 +397,7 @@ namespace
             lv_label_set_text(lbl, txt);
 
             lv_obj_add_flag(lbl, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_set_ext_click_area(lbl, 8);
+            lv_obj_set_ext_click_area(lbl, px(8));
             lv_obj_add_event_cb(lbl, keyTapCb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
             keyLbls[i] = lbl;
             keyFonts[i] = nullptr;
@@ -561,7 +562,7 @@ namespace RadialKeyboard
         prevSelected = -1;
 
         overlay = lv_obj_create(lv_layer_top());
-        lv_obj_set_size(overlay, 240, 240);
+        lv_obj_set_size(overlay, px(240), px(240));
         lv_obj_center(overlay);
         lv_obj_set_style_bg_color(overlay, Palette::bgApp(), 0);
         lv_obj_set_style_bg_opa(overlay, LV_OPA_COVER, 0);
@@ -580,7 +581,7 @@ namespace RadialKeyboard
         lv_obj_set_style_bg_color(hub, Palette::bgSecondary(), 0);
         lv_obj_set_style_bg_color(hub, Palette::accent(), LV_STATE_PRESSED);
         lv_obj_set_style_border_color(hub, Palette::border(), 0);
-        lv_obj_set_style_border_width(hub, 1, 0);
+        lv_obj_set_style_border_width(hub, px(1), 0);
         lv_obj_set_style_pad_all(hub, 0, 0);
         lv_obj_clear_flag(hub, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(hub, LV_OBJ_FLAG_CLICKABLE);
@@ -588,24 +589,24 @@ namespace RadialKeyboard
 
         titleLbl = lv_label_create(hub);
         lv_label_set_text(titleLbl, titleText);
-        lv_obj_set_style_text_font(titleLbl, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(titleLbl, &UI_FONT_14, 0);
         lv_obj_set_style_text_color(titleLbl, Palette::textMuted(), 0);
-        lv_obj_align(titleLbl, LV_ALIGN_CENTER, 0, -42);
+        lv_obj_align(titleLbl, LV_ALIGN_CENTER, 0, px(-42));
 
         textLbl = lv_label_create(hub);
         lv_obj_set_width(textLbl, TEXT_WIDTH);
         lv_label_set_long_mode(textLbl, LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_align(textLbl, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_font(textLbl, &lv_font_montserrat_18, 0);
+        lv_obj_set_style_text_font(textLbl, &UI_FONT_18, 0);
         lv_obj_set_style_text_color(textLbl, Palette::text(), 0);
-        lv_obj_align(textLbl, LV_ALIGN_CENTER, 0, -10);
+        lv_obj_align(textLbl, LV_ALIGN_CENTER, 0, px(-10));
 
         // Restates the highlighted key in the middle, so you never have to
         // read the small rim glyph to know what a click will type.
         previewLbl = lv_label_create(hub);
-        lv_obj_set_style_text_font(previewLbl, &lv_font_montserrat_24, 0);
+        lv_obj_set_style_text_font(previewLbl, &UI_FONT_24, 0);
         lv_obj_set_style_text_color(previewLbl, Palette::accent(), 0);
-        lv_obj_align(previewLbl, LV_ALIGN_CENTER, 0, 30);
+        lv_obj_align(previewLbl, LV_ALIGN_CENTER, 0, px(30));
 
         refreshText();
         buildRing();
