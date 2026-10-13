@@ -210,44 +210,56 @@ static void initTouchAndDisplay()
 // travel UI->network through FluidNCClient's queue; status travels back as
 // plain struct reads. Nothing here touches LVGL -- LVGL is single-threaded
 // and stays entirely on core 1.
+//
+// terraPixel is NOT on this task -- see lightsTask below.
 static void networkTask(void *)
 {
     for (;;)
     {
         WifiManager::update();
-        // Demo mode (demo_mode.h) runs without any network, so the clients
-        // are also updated while it's on -- and while they're still in it,
-        // so they notice it being switched off.
+        // Demo mode (demo_mode.h) runs without any network, so the client
+        // is also updated while it's on -- and while it's still in it, so it
+        // notices it being switched off.
         bool ready = WifiManager::isReady();
-        bool demo = Demo::isOn() || fluidNC.inDemo() || terraPixel.inDemo();
+        bool demo = Demo::isOn() || fluidNC.inDemo();
         if (ready || demo)
         {
             fluidNC.update();
-            // terraPixel's HTTP calls block this task for up to a second
-            // each (longer if its mDNS name doesn't resolve), and nothing
-            // pumps the FluidNC websocket or drains the command queue while
-            // they do. Harmless when the machine is parked; during a homing
-            // cycle or a job it means seconds-long gaps on a channel
-            // FluidNC is actively talking on. So the lights wait until the
-            // machine has stopped moving -- they refresh every 3s anyway,
-            // and a few skipped polls cost nothing.
-            MachineMode m = fluidNC.status().mode;
-            if (m != MachineMode::Homing && m != MachineMode::Run && m != MachineMode::Hold)
-                terraPixel.update(); // blocking HTTP -- belongs here, not on the UI loop
 
-            // Same reasoning again, one step further: a firmware download
-            // holds this task for the length of the transfer. It only runs
-            // when the About card has actually asked for it, and it refuses
-            // outright while the machine is moving (see ota_updater.cpp).
+            // A firmware download holds this task for the length of the
+            // transfer. It only runs when the About card has actually asked
+            // for it, and it refuses outright while the machine is moving
+            // (see ota_updater.cpp).
             if (ready) OtaUpdater::update();
         }
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 
+// terraPixel gets a task of its own, also on core 0. Its HTTP calls block
+// for up to a second each, and an mDNS lookup for a terraPixel that isn't
+// on the network blocks for 1.5s every 3s. On networkTask that held up the
+// FluidNC queue and socket for as long -- the lights only ran while the
+// machine was idle, to spare jobs, but idle is exactly when a pen tap or the
+// next jog is sent, so those waited in the queue for up to 1.5s. Here a
+// stalled light request delays nothing but the lights, and they needn't
+// wait for the machine to stop moving either.
+static void lightsTask(void *)
+{
+    for (;;)
+    {
+        if (WifiManager::isReady() || Demo::isOn() || terraPixel.inDemo())
+            terraPixel.update();
+        // The lights refresh every 3s and apply settings as they change;
+        // 10ms is plenty, and leaves core 0 to networkTask.
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
 static void startNetworkTask()
 {
     xTaskCreatePinnedToCore(networkTask, "net", 8192, nullptr, 1, nullptr, 0);
+    xTaskCreatePinnedToCore(lightsTask, "lights", 8192, nullptr, 1, nullptr, 0);
 }
 
 void setup()

@@ -297,11 +297,13 @@ design_handoff_radial_dial_ui/   the original design brief (historical)
 
 Some notes worth knowing before changing things:
 
-- **Networking runs on core 0**, in its own task (see `networkTask` in
-  `main.cpp`). mDNS lookups, WebSocket reads and HTTP calls all block for
-  seconds at a time; running them in `loop()` stalls rendering and touch.
-  Commands travel UI→network through a queue, and **nothing outside that task
-  may touch LVGL** — LVGL is single-threaded and lives on core 1.
+- **Networking runs on core 0**, in two tasks (see `networkTask` and
+  `lightsTask` in `main.cpp`). mDNS lookups, WebSocket reads and HTTP calls
+  all block for seconds at a time; running them in `loop()` stalls rendering
+  and touch. terraPixel has a task of its own so its HTTP calls can't hold up
+  the FluidNC connection either. Commands travel UI→network through a queue,
+  and **nothing outside the UI loop may touch LVGL** — LVGL is
+  single-threaded and lives on core 1.
 - **It's a round screen.** Anything more than ~120px from centre (120,120) is
   behind the bezel and physically unreachable, corners included. Several bugs
   have come from laying out against the 240×240 square instead of the circle.
