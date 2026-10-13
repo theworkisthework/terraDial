@@ -3,10 +3,22 @@
 #include <Arduino.h>
 #include <IPAddress.h>
 
+// What the panel can tell about the terraPixel host it's pointed at, for
+// Settings > Machine to show beside the field.
+enum class TerraPixelLink : uint8_t
+{
+    Off,         // switched off in Settings -- nothing is contacted
+    Searching,   // on, no answer yet either way
+    NotFound,    // the name doesn't resolve, or nothing answers there
+    WrongDevice, // something answers, but not with terraPixel's /status
+    Connected,
+};
+
 // Snapshot of terraPixel's state, read from its /status endpoint (added to
 // warderoid-ctrl/terraPixel alongside /party -- see that repo's main.cpp).
 struct TerraPixelStatus
 {
+    TerraPixelLink link = TerraPixelLink::Off;
     bool reachable = false; // false until the first successful /status read
     bool filmMode = false;
     uint8_t brightness = 200;
@@ -22,7 +34,8 @@ struct TerraPixelStatus
 //
 // THREADING: every HTTP call here blocks for up to REQUEST_TIMEOUT_MS, plus
 // an mDNS lookup if the host isn't resolved yet. update() therefore runs on
-// main.cpp's networkTask (core 0) and NEVER on the UI loop.
+// main.cpp's lightsTask (core 0) -- NEVER on the UI loop, and not on
+// networkTask either, where it used to stall the FluidNC connection.
 //
 // That split matters. These calls used to be made straight from the Lights
 // screen's widget callbacks and from a 3-second poll that ran on every
@@ -31,17 +44,19 @@ struct TerraPixelStatus
 // like it was "catching up" (see main.cpp's networkTask comment).
 //
 // The UI therefore never calls HTTP. The setters below only record intent
-// and return immediately; the network task applies it and refreshes
-// status(), which the UI reads as a plain struct.
+// and return immediately; lightsTask applies it and refreshes status(),
+// which the UI reads as a plain struct.
 class TerraPixelClient
 {
 public:
     // Call once mDNS is already up (see WifiManager).
     void begin();
 
-    // networkTask only. Applies whatever the UI asked for, and refreshes
+    // lightsTask only. Applies whatever the UI asked for, and refreshes
     // status on its own schedule -- or, in demo mode (demo_mode.h), plays
-    // pretend lights that take the settings without any network.
+    // pretend lights that take the settings without any network. Does
+    // nothing at all while terraPixel is switched off in Settings, demo
+    // aside.
     void update();
     bool inDemo() const { return demoActive_; }
 
@@ -56,9 +71,8 @@ public:
     void setRadius(float radiusLeds);
     void toggleParty();
     void requestRefresh();
-    // The LED host setting changed: resolve it again before the next
-    // request rather than keep talking to the old address.
-    void hostChanged() { haveIp_ = false; lastResolveAttempt_ = 0; }
+    // The LED host setting changed: reset host-specific state on lightsTask.
+    void hostChanged() { hostChangedPending_ = true; }
 
 private:
     TerraPixelStatus status_;
@@ -72,12 +86,13 @@ private:
     static const uint32_t REQUEST_TIMEOUT_MS = 1000;
     static const uint32_t REFRESH_MS = 3000;
 
-    // Desired state, written by the UI task and consumed by networkTask.
+    // Desired state, written by the UI task and consumed by lightsTask.
     // Plain volatile flags rather than a queue: these are last-writer-wins
     // values, not a sequence of events that must all be delivered.
     volatile bool setDirty_ = false;
     volatile bool partyPending_ = false;
     volatile bool refreshPending_ = false;
+    volatile bool hostChangedPending_ = false;
     volatile bool desiredFilm_ = false;
     volatile uint8_t desiredBrightness_ = 200;
     volatile float desiredRadius_ = 3.5f;
