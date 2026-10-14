@@ -139,13 +139,30 @@ namespace
     // check fired this on every single knob-jog tick, yanking the screen
     // to Job Progress and immediately back to Dial regardless of what
     // screen the user was actually on.
+    // How long a job has to have looked finished before Job Progress hands
+    // the screen back to the dial. One Idle report isn't proof: a single
+    // stray one mid-job used to send the screen to the dial, and the next
+    // Run report straight back -- a panel flicking between the two that
+    // you couldn't hit Pause on.
+    const uint32_t JOB_END_SETTLE_MS = 2000;
+
     void checkAutoNav()
     {
         static MachineMode lastMode = MachineMode::Boot;
         static bool lastJobActive = false;
+        static uint32_t endedAt = 0; // when the job looked finished; 0 = it hasn't
 
         MachineMode mode = fluidNC.status().mode;
         bool jobActive = fluidNC.status().jobActive;
+        bool idle = (mode == MachineMode::Idle || mode == MachineMode::Done);
+
+        if (!idle || !jobFlowActive) endedAt = 0;
+        if (endedAt && millis() - endedAt >= JOB_END_SETTLE_MS)
+        {
+            endedAt = 0;
+            jobFlowActive = false;
+            goTo(DIAL_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
+        }
 
         // A job we didn't start is recognised from the status report's SD:
         // field, which can arrive a report or two after the state flips to
@@ -169,11 +186,9 @@ namespace
             goTo(JOB_PROGRESS_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
         }
         else if (jobFlowActive &&
-                 (lastMode == MachineMode::Run || lastMode == MachineMode::Hold) &&
-                 (mode == MachineMode::Idle || mode == MachineMode::Done))
+                 (lastMode == MachineMode::Run || lastMode == MachineMode::Hold) && idle)
         {
-            jobFlowActive = false;
-            goTo(DIAL_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
+            endedAt = millis() | 1; // the dial, if it's still over in JOB_END_SETTLE_MS
         }
         lastMode = mode;
     }

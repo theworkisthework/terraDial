@@ -657,6 +657,14 @@ void FluidNCClient::applyState(const char *state)
 
     if (next == MachineMode::Run && status_.mode != MachineMode::Run) runStartedAt_ = millis();
     if (next != MachineMode::Run && next != MachineMode::Hold) status_.jobActive = false;
+    // Every mode change, with the word FluidNC actually sent: the screens
+    // follow these, so this is the record to read when one jumps about.
+    if (next != status_.mode)
+    {
+        const char *bar = strchr(state, '|');
+        int len = bar ? (int)(bar - state) : (int)strlen(state);
+        Serial.printf("[fluidnc] state %.*s -> mode %d, job %d\n", len, state, (int)next, status_.jobActive);
+    }
     status_.mode = next;
 }
 
