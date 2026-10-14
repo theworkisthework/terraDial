@@ -152,16 +152,17 @@ namespace
     {
         static MachineMode lastMode = MachineMode::Boot;
         static bool lastJobActive = false;
-        static uint32_t endedAt = 0; // when the job looked finished; 0 = it hasn't
+        static bool ended = false;   // the job looked finished...
+        static uint32_t endedAt = 0; // ...at this time
 
         MachineMode mode = fluidNC.status().mode;
         bool jobActive = fluidNC.status().jobActive;
         bool idle = (mode == MachineMode::Idle || mode == MachineMode::Done);
 
-        if (!idle || !jobFlowActive) endedAt = 0;
-        if (endedAt && millis() - endedAt >= JOB_END_SETTLE_MS)
+        if (!idle || !jobFlowActive) ended = false;
+        if (ended && millis() - endedAt >= JOB_END_SETTLE_MS)
         {
-            endedAt = 0;
+            ended = false;
             jobFlowActive = false;
             goTo(DIAL_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
         }
@@ -190,7 +191,8 @@ namespace
         else if (jobFlowActive &&
                  (lastMode == MachineMode::Run || lastMode == MachineMode::Hold) && idle)
         {
-            endedAt = millis() | 1; // the dial, if it's still over in JOB_END_SETTLE_MS
+            if (!ended) endedAt = millis(); // the dial, if it's still over in JOB_END_SETTLE_MS
+            ended = true;
         }
         lastMode = mode;
     }

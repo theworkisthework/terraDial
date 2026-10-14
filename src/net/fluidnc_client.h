@@ -215,7 +215,8 @@ private:
     // A plot from SD goes Idle for a moment at every pen lift and drop (the
     // planner drains while the pen moves), several times a second. So once
     // a job is running, Idle only ends it after JOB_GAP_MS of nothing else.
-    uint32_t jobIdleSince_ = 0; // 0 = not idle mid-job
+    bool jobIdling_ = false;
+    uint32_t jobIdleSince_ = 0;
     static const uint32_t JOB_GAP_MS = 3000;
 
     SdFileList sdFiles_;

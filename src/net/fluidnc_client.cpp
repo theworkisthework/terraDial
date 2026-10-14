@@ -648,16 +648,20 @@ void FluidNCClient::applyState(const char *state)
     else if (!strncmp(state, "Home",  4)) next = MachineMode::Homing;
     else if (!strncmp(state, "Sleep", 5)) next = MachineMode::Idle;
     bool idle = !strncmp(state, "Idle", 4);
-    if (!idle) jobIdleSince_ = 0;
+    if (!idle) jobIdling_ = false;
     if (idle && status_.jobActive && status_.mode == MachineMode::Run)
     {
         // Mid-job pen lift or drop, most likely: stay Run (and the job up)
         // until it's been idle long enough to really be over. Otherwise
         // every screen and the ring follow the machine flicking Run/Idle.
         uint32_t now = millis();
-        if (!jobIdleSince_) jobIdleSince_ = now | 1;
+        if (!jobIdling_)
+        {
+            jobIdling_ = true;
+            jobIdleSince_ = now;
+        }
         if (now - jobIdleSince_ < JOB_GAP_MS) return;
-        jobIdleSince_ = 0;
+        jobIdling_ = false;
     }
 
     if (idle)
