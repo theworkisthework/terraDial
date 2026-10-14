@@ -155,7 +155,7 @@ namespace
                                   0);
 
         lv_color_t iconColor = alert ? Palette::alertFg()
-                                     : lv_color_mix(Palette::accentFg(), Palette::textMuted(), mix);
+                                     : lv_color_mix(Palette::accentFg(), Palette::icon(), mix);
 
         UiRingIconSize want = uiRingIconSize(nearness, iconSize[i]);
 
@@ -311,8 +311,8 @@ namespace
         {
             case MachineMode::Run:    return lv_color_hex(0x3ddc84);
             case MachineMode::Hold:   return lv_color_hex(0xffa726);
-            case MachineMode::Alarm:  return Palette::accent();          // the terraForge red
-            case MachineMode::Homing: return Palette::accentSecondary(); // file-browser blue
+            case MachineMode::Alarm:  return Palette::alarmState();
+            case MachineMode::Homing: return Palette::info();
             case MachineMode::Done:   return lv_color_hex(0x3ddc84);
             case MachineMode::Boot:   return Palette::textFaint();
             case MachineMode::Idle:

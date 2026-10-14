@@ -1311,7 +1311,7 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_obj_set_style_bg_color(chip, lv_color_mix(Palette::accent(), Palette::bgSecondary(), mix), 0);
         lv_obj_t *icon = lv_obj_get_child(chip, 0);
         if (!icon) return;
-        lv_obj_set_style_text_color(icon, lv_color_mix(Palette::accentFg(), Palette::textMuted(), mix), 0);
+        lv_obj_set_style_text_color(icon, lv_color_mix(Palette::accentFg(), Palette::icon(), mix), 0);
 
         // A font change forces a label relayout, unlike the colour write
         // above -- skip it unless the size bucket actually flipped, since
@@ -1421,7 +1421,7 @@ lv_obj_t *uiSettingsCreate()
     lv_obj_t *backLbl = lv_label_create(back);
     lv_label_set_text(backLbl, LUCIDE_CHEVRON_LEFT);
     lv_obj_set_style_text_font(backLbl, &UI_ICONS_16, 0);
-    lv_obj_set_style_text_color(backLbl, Palette::textMuted(), 0);
+    lv_obj_set_style_text_color(backLbl, Palette::icon(), 0);
     lv_obj_center(backLbl);
 
     return screenRoot;

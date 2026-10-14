@@ -223,7 +223,7 @@ namespace
 
         lv_obj_t *icon = lv_obj_get_child(chip, 0);
         if (!icon) return;
-        lv_obj_set_style_text_color(icon, lv_color_mix(Palette::accentFg(), Palette::textMuted(), mix), 0);
+        lv_obj_set_style_text_color(icon, lv_color_mix(Palette::accentFg(), Palette::icon(), mix), 0);
 
         // A font change forces a label relayout, unlike the colour write
         // above -- skip it unless the size bucket actually flipped, since

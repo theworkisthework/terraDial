@@ -59,7 +59,19 @@ namespace Palette
     // Informational secondary accent -- terraForge's file-browser blue.
     // Used where something needs to stand out WITHOUT competing with the
     // red (e.g. the "pen down" status pill).
-    inline lv_color_t accentSecondary() { return pick(0x60a0ff, 0x66cccc); } // --tf-fs-blue-text
+    // terraPen spends it on coral, its second brand colour: section titles,
+    // the demo tag, the spirograph's gear.
+    inline lv_color_t accentSecondary() { return pick(0x60a0ff, 0xe83b68); } // --tf-fs-blue-text
+
+    // Icons at rest (unselected ring items, back arrows, screen headers).
+    // terraForge keeps them muted grey; terraPen colours them coral.
+    inline lv_color_t icon() { return pick(0x9ca3af, 0xe83b68); }
+    // Status that's information, not a call to act: homing, a light rail
+    // that's reachable. terraForge's blue; terraPen's teal.
+    inline lv_color_t info() { return pick(0x60a0ff, 0x66cccc); }
+    // The machine in ALARM. terraForge's red accent; in terraPen the accent
+    // is lime, which says nothing like "alarm", so coral.
+    inline lv_color_t alarmState() { return pick(0xe94560, 0xe83b68); }
 
     inline lv_color_t selectedFill() { return pick(0x1a3a6e, 0x2a5531); } // --tf-file-selected, dim blue selected-row fill
 
