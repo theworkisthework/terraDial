@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include "ui_nav.h"
 #include "ui_scale.h"
 #include <lvgl.h>
@@ -55,6 +56,7 @@ namespace
     void goTo(int index, lv_scr_load_anim_t anim)
     {
         if (currentIndex == index) return;
+        Serial.printf("[nav] screen %d -> %d\n", currentIndex, index);
         if (currentIndex == JOB_PROGRESS_SCREEN_INDEX) jobFlowActive = false;
         currentIndex = index;
         lv_scr_load_anim(screens[currentIndex], anim, 120, 0, false); // was 180 -- snappier screen switching
@@ -247,6 +249,7 @@ namespace UiNav
 
         int32_t delta = jogWheel.takeRotationDelta();
         ButtonEvent ev = jogWheel.takeButtonEvent();
+        if (ev != ButtonEvent::None) Serial.printf("[nav] knob button %d\n", (int)ev);
 
         // A real hand on the knob ends a demo tour on the spot; with no
         // real input, the tour may supply its next scripted turn or click,

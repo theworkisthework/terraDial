@@ -212,6 +212,12 @@ private:
     static const uint32_t MIN_JOB_MS = 5000;
     static const uint32_t CELEBRATE_MS = 12000;
 
+    // A plot from SD goes Idle for a moment at every pen lift and drop (the
+    // planner drains while the pen moves), several times a second. So once
+    // a job is running, Idle only ends it after JOB_GAP_MS of nothing else.
+    uint32_t jobIdleSince_ = 0; // 0 = not idle mid-job
+    static const uint32_t JOB_GAP_MS = 3000;
+
     SdFileList sdFiles_;
 
     // Outbound command plumbing. UI-thread callers enqueue; networkTask
