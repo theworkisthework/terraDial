@@ -27,7 +27,7 @@ void addBackButton(lv_obj_t *screen, lv_event_cb_t onBack)
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, LUCIDE_CHEVRON_LEFT);
     lv_obj_set_style_text_font(lbl, &UI_ICONS_16, 0);
-    lv_obj_set_style_text_color(lbl, Palette::textMuted(), 0);
+    lv_obj_set_style_text_color(lbl, Palette::icon(), 0);
     lv_obj_center(lbl);
 }
 
@@ -85,7 +85,7 @@ ScreenShell createScreenShell(const char *title, const char *icon)
     lv_obj_t *iconLbl = lv_label_create(header);
     lv_label_set_text(iconLbl, icon);
     lv_obj_set_style_text_font(iconLbl, &UI_ICONS_14, 0);
-    lv_obj_set_style_text_color(iconLbl, Palette::textMuted(), 0);
+    lv_obj_set_style_text_color(iconLbl, Palette::icon(), 0);
 
     lv_obj_t *titleLbl = lv_label_create(header);
     lv_label_set_text(titleLbl, title);

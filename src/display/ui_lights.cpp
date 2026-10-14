@@ -128,7 +128,7 @@ void uiLightsOnShow()
 
     if (st.reachable)
     {
-        lv_obj_set_style_bg_color(connDot, Palette::accentSecondary(), 0);
+        lv_obj_set_style_bg_color(connDot, Palette::info(), 0);
         char buf[24];
         snprintf(buf, sizeof(buf), "Rail: %s", st.mode);
         lv_label_set_text(railModeLabel, buf);
@@ -158,7 +158,7 @@ void uiLightsUpdate()
     if (!connDot) return; // screen not created yet
 
     const TerraPixelStatus &st = terraPixel.status();
-    lv_obj_set_style_bg_color(connDot, st.reachable ? Palette::accentSecondary() : Palette::textFaint(), 0);
+    lv_obj_set_style_bg_color(connDot, st.reachable ? Palette::info() : Palette::textFaint(), 0);
     char buf[24];
     snprintf(buf, sizeof(buf), "Rail: %s", st.reachable ? st.mode : "unreachable");
     lv_label_set_text(railModeLabel, buf);
