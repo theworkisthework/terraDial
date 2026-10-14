@@ -22,14 +22,14 @@ namespace
     // Light ~240 luminance, darkest ink ~50: a wide gap, which is what a
     // phone's binariser cares about. The pupil is a deepened accent (~80):
     // the stock accent alone (~120) is too close to mid-grey to trust.
-    // The terraPen skin swaps the navy inks for its shell greens and the
-    // pupil for a deepened coral, keeping the same light/dark gap.
+    // The terraPen skin swaps the navy inks for near-blacks and the pupil
+    // for a deepened coral, keeping the same light/dark gap.
     lv_color_t paper() { return Palette::pick(0xf5f0e8, 0xf6f8ec); }
     lv_color_t pupil() { return Palette::pick(0xa3283f, 0xa8244c); }
     lv_color_t inkAt(float t) // t: 0 at the top-left corner, 1 at the bottom-right
     {
-        const lv_color_t a = Palette::pick(0x1a1a2e, 0x17321b), b = Palette::pick(0x0f3460, 0x24492a),
-                         c = Palette::pick(0x3d1150, 0x0e2011);
+        const lv_color_t a = Palette::pick(0x1a1a2e, 0x121212), b = Palette::pick(0x0f3460, 0x2a2a2a),
+                         c = Palette::pick(0x3d1150, 0x0b0b0b);
         if (t < 0.5f) return lv_color_mix(b, a, (uint8_t)(t * 2 * 255));
         return lv_color_mix(c, b, (uint8_t)((t - 0.5f) * 2 * 255));
     }
