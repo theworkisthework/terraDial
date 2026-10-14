@@ -901,7 +901,7 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_obj_t *skinSw = uiMakeSwitch(skinRow, Config::get().skin == 1);
         lv_obj_add_event_cb(skinSw, skinCb, LV_EVENT_VALUE_CHANGED, NULL);
         skinHint = lv_label_create(card);
-        lv_label_set_text(skinHint, "Lime on shell green, from the terraPen brand. Restarts the panel.");
+        lv_label_set_text(skinHint, "Black, lime and coral, as terrapen.uk. Restarts the panel.");
         lv_label_set_long_mode(skinHint, LV_LABEL_LONG_WRAP);
         lv_obj_set_width(skinHint, lv_pct(100));
         lv_obj_set_style_text_align(skinHint, LV_TEXT_ALIGN_CENTER, 0);

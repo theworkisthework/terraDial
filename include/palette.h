@@ -16,12 +16,12 @@
 // Exact fidelity depends on the real IPS panel, not a monitor -- nudge
 // these after flashing if something looks off, rather than treating the hex
 // values as gospel.
-// A second skin, terraPen, follows the terraPen brand playbook
-// (terrapen_identity/terraPen_brandPlaybook.pdf): its "lime / shell green"
-// pairing, the one terrapen.uk itself uses. Lime is the accent on shell
-// green surfaces, with white copy, as the playbook's two-colour rule allows.
-// Coral, the brand's other colour, is kept for the alert alone: E-Stop has
-// to read as a warning in either skin.
+// A second skin, terraPen, follows the terraPen brand (the playbook in
+// terrapen_identity/terraPen_brandPlaybook.pdf, as terrapen.uk wears it):
+// near-black surfaces with white copy, lime as the accent, and coral for
+// text and icons on lime, icons at rest and secondary accents -- the
+// website's lime header with coral links, on its black page. Coral is also
+// the alert, so E-Stop still reads as a warning.
 //
 // The skin is chosen in Settings > Display and applied at boot (main.cpp):
 // widgets take their colours as they're built, so a change restarts the
@@ -36,17 +36,17 @@ namespace Palette
     inline lv_color_t pick(uint32_t forge, uint32_t pen) { return lv_color_hex(skin() == Skin::TerraPen ? pen : forge); }
 
     // -- Surfaces, darkest to lightest --
-    inline lv_color_t bgTerminal() { return pick(0x0d1117, 0x0e2011); }  // --tf-bg-terminal, deepest (log/console style panes)
-    inline lv_color_t bgApp() { return pick(0x1a1a2e, 0x17321b); }       // --tf-bg-app, the screen background
-    inline lv_color_t bgPanel() { return pick(0x16213e, 0x1d3d22); }     // --tf-bg-panel
-    inline lv_color_t bgSecondary() { return pick(0x0f3460, 0x24492a); } // --tf-bg-secondary, the "dark sea blue" raised surface: cards, chips, buttons
-    inline lv_color_t bgSecondaryHover() { return pick(0x1a4a8a, 0x2f5c36); } // --tf-bg-secondary-hover
+    inline lv_color_t bgTerminal() { return pick(0x0d1117, 0x0b0b0b); }  // --tf-bg-terminal, deepest (log/console style panes)
+    inline lv_color_t bgApp() { return pick(0x1a1a2e, 0x121212); }       // --tf-bg-app, the screen background
+    inline lv_color_t bgPanel() { return pick(0x16213e, 0x1a1a1a); }     // --tf-bg-panel
+    inline lv_color_t bgSecondary() { return pick(0x0f3460, 0x262626); } // --tf-bg-secondary, the "dark sea blue" raised surface: cards, chips, buttons
+    inline lv_color_t bgSecondaryHover() { return pick(0x1a4a8a, 0x303030); } // --tf-bg-secondary-hover
 
     // -- Lines and text --
-    inline lv_color_t border() { return pick(0x5c7a9e, 0x4f7a55); }    // --tf-border
-    inline lv_color_t text() { return pick(0xe0e0e0, 0xf4f7ec); }      // --tf-text (slightly off pure white)
-    inline lv_color_t textMuted() { return pick(0x9ca3af, 0xa9bfa6); } // --tf-text-muted
-    inline lv_color_t textFaint() { return pick(0x818ea5, 0x8aa487); } // --tf-text-faint
+    inline lv_color_t border() { return pick(0x5c7a9e, 0x4a4a4a); }    // --tf-border
+    inline lv_color_t text() { return pick(0xe0e0e0, 0xf5f5f5); }      // --tf-text (slightly off pure white)
+    inline lv_color_t textMuted() { return pick(0x9ca3af, 0xb3b3b3); } // --tf-text-muted
+    inline lv_color_t textFaint() { return pick(0x818ea5, 0x8c8c8c); } // --tf-text-faint
 
     // -- Accents --
     // The red-magenta that defines terraForge's look against the navy.
@@ -55,7 +55,7 @@ namespace Palette
     // Foreground for text/icons on accent() fills. The accent is a
     // saturated mid-tone red, so it needs light text on top (the previous
     // lavender-pastel accent needed the opposite -- dark text).
-    inline lv_color_t accentFg() { return pick(0xffffff, 0x17321b); }
+    inline lv_color_t accentFg() { return pick(0xffffff, 0xe83b68); }
     // Informational secondary accent -- terraForge's file-browser blue.
     // Used where something needs to stand out WITHOUT competing with the
     // red (e.g. the "pen down" status pill).
@@ -73,13 +73,13 @@ namespace Palette
     // is lime, which says nothing like "alarm", so coral.
     inline lv_color_t alarmState() { return pick(0xe94560, 0xe83b68); }
 
-    inline lv_color_t selectedFill() { return pick(0x1a3a6e, 0x2a5531); } // --tf-file-selected, dim blue selected-row fill
+    inline lv_color_t selectedFill() { return pick(0x1a3a6e, 0x2c2f16); } // --tf-file-selected, dim blue selected-row fill
 
     // Deliberately a deeper, heavier red than accent(): E-Stop has to read
     // as an escalation, and the accent alone is too common elsewhere in the
     // UI (selected dial item, active chips) to carry that weight by itself.
     inline lv_color_t alert() { return pick(0xd12b3f, 0xe83b68); }
-    // Text and icons on alert() fills. White in both skins: accentFg() is
-    // dark in terraPen, to sit on lime, and would be muddy on coral.
+    // Text and icons on alert() fills. White in both skins: terraPen's
+    // accentFg() is coral itself, to sit on lime.
     inline lv_color_t alertFg() { return lv_color_hex(0xffffff); }
 }
