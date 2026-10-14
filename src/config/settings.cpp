@@ -55,6 +55,7 @@ namespace Config
         settings.ringBrightnessPct = prefs.getUChar("ringBright", 60);
         settings.showIdleLogo = prefs.getBool("idleLogo", true);
         settings.invertMenuRotation = prefs.getBool("invMenuRot", false);
+        settings.skin = prefs.getUChar("skin", 0);
         settings.spiroInJobs = prefs.getBool("spiroJobs", true);
         copyToBuf(settings.penUpCmd, sizeof(settings.penUpCmd), prefs.getString("penUpCmd", PEN_UP_CMD));
         copyToBuf(settings.penDownCmd, sizeof(settings.penDownCmd), prefs.getString("penDownCmd", PEN_DOWN_CMD));
@@ -75,6 +76,7 @@ namespace Config
         prefs.putUChar("ringBright", settings.ringBrightnessPct);
         prefs.putBool("idleLogo", settings.showIdleLogo);
         prefs.putBool("invMenuRot", settings.invertMenuRotation);
+        prefs.putUChar("skin", settings.skin);
         prefs.putBool("spiroJobs", settings.spiroInJobs);
         prefs.putString("penUpCmd", settings.penUpCmd);
         prefs.putString("penDownCmd", settings.penDownCmd);

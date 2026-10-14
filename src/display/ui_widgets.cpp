@@ -142,8 +142,9 @@ lv_obj_t *uiMakeSlider(lv_obj_t *parent, int32_t min, int32_t max, int32_t value
     // Filled portion
     lv_obj_set_style_bg_color(slider, Palette::accent(), LV_PART_INDICATOR);
     lv_obj_set_style_radius(slider, SLIDER_TRACK_RADIUS, LV_PART_INDICATOR);
-    // Handle -- white on the red reads clearly and matches accentFg usage
-    lv_obj_set_style_bg_color(slider, Palette::accentFg(), LV_PART_KNOB);
+    // Handle -- light, so it reads on the filled accent and the bare track
+    // alike, in either skin.
+    lv_obj_set_style_bg_color(slider, Palette::text(), LV_PART_KNOB);
     lv_obj_set_style_pad_all(slider, SLIDER_KNOB_PAD, LV_PART_KNOB);
     // Extends the touch area past the 10px track without drawing bigger.
     lv_obj_set_ext_click_area(slider, px(8));
@@ -156,7 +157,7 @@ lv_obj_t *uiMakeSwitch(lv_obj_t *parent, bool checked)
     lv_obj_set_size(sw, px(44), px(24));
     lv_obj_set_style_bg_color(sw, Palette::bgPanel(), LV_PART_MAIN);
     lv_obj_set_style_bg_color(sw, Palette::accent(), LV_PART_INDICATOR | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(sw, Palette::accentFg(), LV_PART_KNOB);
+    lv_obj_set_style_bg_color(sw, Palette::text(), LV_PART_KNOB); // light on and off, either skin
     lv_obj_set_ext_click_area(sw, px(8));
     if (checked) lv_obj_add_state(sw, LV_STATE_CHECKED);
     return sw;

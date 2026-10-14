@@ -243,7 +243,7 @@ lv_obj_t *uiJobProgressCreate()
     lv_obj_t *stopLbl = lv_label_create(stopBtn);
     lv_label_set_text(stopLbl, LUCIDE_SQUARE);
     lv_obj_set_style_text_font(stopLbl, &UI_ICONS_24, 0);
-    lv_obj_set_style_text_color(stopLbl, Palette::accentFg(), 0);
+    lv_obj_set_style_text_color(stopLbl, Palette::alertFg(), 0);
     lv_obj_center(stopLbl);
 
     // Drawing view's percentage: low in the circle, clear of the back

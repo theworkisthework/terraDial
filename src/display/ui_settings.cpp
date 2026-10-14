@@ -21,6 +21,7 @@
 #include "../net/ota_updater.h"
 #include "../net/demo_mode.h"
 #include "../led/panel_ring.h"
+#include "ui_spiro.h"
 #include <WiFi.h>
 #include <stdio.h>
 #include <string.h>
@@ -791,6 +792,26 @@ else if (WiFi.status() != WL_CONNECTED)
         Config::save();
     }
 
+    lv_obj_t *skinHint = nullptr;
+
+    // Colours are baked into every widget as it's built, so a new skin takes
+    // a restart. A plot running from SD carries on without the panel; a
+    // spirograph plot is streamed BY the panel and would stop, so that waits.
+    void skinCb(lv_event_t *e)
+    {
+        lv_obj_t *sw = (lv_obj_t *)lv_event_get_target(e);
+        Config::get().skin = lv_obj_has_state(sw, LV_STATE_CHECKED) ? 1 : 0;
+        Config::save();
+        if (uiSpiroPlotActive())
+        {
+            lv_label_set_text(skinHint, "Applies after the spirograph plot, on the next restart.");
+            return;
+        }
+        lv_label_set_text(skinHint, "Restarting...");
+        lv_timer_t *t = lv_timer_create([](lv_timer_t *) { ESP.restart(); }, 400, nullptr);
+        lv_timer_set_repeat_count(t, 1);
+    }
+
     void invertRotCb(lv_event_t *e)
     {
         lv_obj_t *sw = (lv_obj_t *)lv_event_get_target(e);
@@ -875,6 +896,17 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_obj_t *logoRow = uiMakeRow(card, "Idle logo");
         lv_obj_t *logoSw = uiMakeSwitch(logoRow, Config::get().showIdleLogo);
         lv_obj_add_event_cb(logoSw, idleLogoCb, LV_EVENT_VALUE_CHANGED, NULL);
+
+        lv_obj_t *skinRow = uiMakeRow(card, "terraPen colours");
+        lv_obj_t *skinSw = uiMakeSwitch(skinRow, Config::get().skin == 1);
+        lv_obj_add_event_cb(skinSw, skinCb, LV_EVENT_VALUE_CHANGED, NULL);
+        skinHint = lv_label_create(card);
+        lv_label_set_text(skinHint, "Lime on shell green, from the terraPen brand. Restarts the panel.");
+        lv_label_set_long_mode(skinHint, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(skinHint, lv_pct(100));
+        lv_obj_set_style_text_align(skinHint, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_font(skinHint, &UI_FONT_12, 0);
+        lv_obj_set_style_text_color(skinHint, Palette::textMuted(), 0);
 
         lv_obj_t *invertRow = uiMakeRow(card, "Invert menu rotation");
         lv_obj_t *invertSw = uiMakeSwitch(invertRow, Config::get().invertMenuRotation);

@@ -4,6 +4,7 @@
 #include "version.h"
 #include "ui_scale.h"
 #include "config/settings.h"
+#include "palette.h"
 #include "display/lgfx_config.h"
 #include "display/ui_nav.h"
 #include "display/ui_dial.h"
@@ -309,6 +310,8 @@ void setup()
     Serial.printf("terraDial boot -- firmware %s on %s\n", Version::label(), BOARD_NAME);
 
     Config::begin();
+    // Before anything is drawn: every widget takes its colours as it's built.
+    Palette::setSkin(Config::get().skin == 1 ? Palette::Skin::TerraPen : Palette::Skin::TerraForge);
 
     initPowerRails();
     initTouchAndDisplay();

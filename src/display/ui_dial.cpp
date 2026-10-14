@@ -154,7 +154,7 @@ namespace
                                         : lv_color_mix(Palette::accent(), Palette::bgSecondary(), mix),
                                   0);
 
-        lv_color_t iconColor = alert ? Palette::accentFg()
+        lv_color_t iconColor = alert ? Palette::alertFg()
                                      : lv_color_mix(Palette::accentFg(), Palette::textMuted(), mix);
 
         UiRingIconSize want = uiRingIconSize(nearness, iconSize[i]);

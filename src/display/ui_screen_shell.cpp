@@ -52,7 +52,7 @@ void addEstopButton(lv_obj_t *screen)
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, LUCIDE_OCTAGON_X); // the dial's E-Stop icon
     lv_obj_set_style_text_font(lbl, &UI_ICONS_12, 0);
-    lv_obj_set_style_text_color(lbl, Palette::accentFg(), 0);
+    lv_obj_set_style_text_color(lbl, Palette::alertFg(), 0);
     lv_obj_center(lbl);
 }
 
