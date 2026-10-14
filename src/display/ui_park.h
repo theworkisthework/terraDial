@@ -20,3 +20,7 @@ void uiParkTrigger();
 // stepping while the user wanders off to another screen, which is exactly
 // what someone waiting out a 30-second homing cycle will do.
 void uiParkUpdate();
+
+// The macro is lifting, homing or travelling -- so nothing else (the
+// spirograph, say) should start moving the machine.
+bool uiParkActive();
