@@ -7,6 +7,7 @@
 #include "ui_pen.h"
 #include "../config/settings.h"
 #include "ui_screen_shell.h"
+#include "ui_spiro.h"
 #include <stdio.h>
 
 // Built to the same shape as ui_home.cpp and ui_alarm_clear.cpp (icon ->
@@ -174,7 +175,10 @@ void uiParkTrigger()
     // whole reason to exist is the moment AFTER a plot finishes -- so the
     // failure mode is someone reaching for it a little early. Refuse rather
     // than sequence it: there is no recovery once $H has started.
-    if (st.jobActive || st.mode == MachineMode::Run || st.mode == MachineMode::Hold)
+    // A spirograph plot isn't a job as far as FluidNC is concerned, and sits
+    // Idle between its lift, homing and batches -- so ask it directly.
+    if (st.jobActive || st.mode == MachineMode::Run || st.mode == MachineMode::Hold ||
+        uiSpiroPlotActive())
     {
         fail("Machine busy");
         return;
@@ -211,6 +215,8 @@ void uiParkTrigger()
     setPhase(Phase::LiftSettle);
     setStatus(alarmed ? "Unlocking..." : "Lifting pen...");
 }
+
+bool uiParkActive() { return phase != Phase::Off && phase != Phase::Failed; }
 
 void uiParkUpdate()
 {
