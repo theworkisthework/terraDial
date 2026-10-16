@@ -7,22 +7,14 @@ entry in the commit that fixes it.
 
 ## Spirograph
 
-### Spirograph plots and Park assume the plotter has end stops
-`src/display/ui_spiro.cpp` -- `prepare()`, `finish()`; `src/display/ui_park.cpp`
+### Park assumes the plotter has end stops
+`src/display/ui_park.cpp`
 
-First-generation machines have no end stops, so `$H` can't work on them. A
-plot lifts the pen and homes before drawing, draws in G53 machine
-coordinates 25mm from home, then homes again and runs Y clear. Without end
-stops it stops at "Homing didn't start" or "Homing failed" and draws nothing.
-Park is built on `$H` too.
-
-Homing is only a way of getting a known origin, not something drawing needs.
-A "Home before plotting" setting (on by default) could skip the lift and
-homing phases and the final re-home, draw in G54 work coordinates around the
-zero the user has set, and drop the clear-Y move. Things to settle: whether
-zero is the drawing's centre or its corner, the extents check (it assumes
-machine coordinates), and what to do when the machine is alarmed (`$X`, or
-refuse).
+First-generation machines have no end stops, so `$H` can't work on them, and
+Park is built on it: it lifts the pen, homes, then travels in G53 machine
+coordinates. Without end stops it fails at the homing step. The spirograph
+no longer has this problem ("Home before plotting" in Settings); Park would
+need the same switch, or to be hidden, on such a machine.
 
 ### The demo tour can change the curve under a running plot
 `src/display/ui_spiro.cpp` -- `SpiroTour::end()`
