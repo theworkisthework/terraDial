@@ -44,6 +44,9 @@ struct AppSettings
     // The spirograph's entry at the top of the Jobs list. Off moves it to
     // Settings > About instead, for anyone who'd rather Jobs held only jobs.
     bool spiroInJobs;
+    // Light colour scheme (terraForge's light theme) instead of dark. Read
+    // once at boot, so flipping it in Settings reboots the panel.
+    bool lightTheme;
     char penUpCmd[48];
     char penDownCmd[48];
     char wifiSsid[33];

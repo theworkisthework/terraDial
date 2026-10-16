@@ -191,11 +191,11 @@ namespace
             lv_obj_t *btn = lv_obj_get_child(scanList, i);
             bool sel = (i == scanSel);
             lv_obj_set_style_bg_color(btn, sel ? Palette::accent() : Palette::bgPanel(), 0);
-            lv_obj_set_style_text_color(btn, sel ? Palette::accentFg() : lv_color_white(), 0);
+            lv_obj_set_style_text_color(btn, sel ? Palette::accentFg() : Palette::text(), 0);
             if (sel) lv_obj_scroll_to_view(btn, LV_ANIM_ON);
         }
         lv_obj_set_style_bg_color(scanRescanBtn, scanSel == n ? Palette::accent() : Palette::bgSecondary(), 0);
-        lv_obj_set_style_text_color(scanRescanBtn, scanSel == n ? Palette::accentFg() : lv_color_white(), 0);
+        lv_obj_set_style_text_color(scanRescanBtn, scanSel == n ? Palette::accentFg() : Palette::text(), 0);
     }
 
     void closeScanOverlay()
@@ -333,7 +333,7 @@ namespace
         lv_obj_t *titleLbl = lv_label_create(scanOverlay);
         lv_label_set_text(titleLbl, "Select a network");
         lv_obj_set_style_text_font(titleLbl, &UI_FONT_14, 0);
-        lv_obj_set_style_text_color(titleLbl, lv_color_white(), 0);
+        lv_obj_set_style_text_color(titleLbl, Palette::text(), 0);
         lv_obj_align(titleLbl, LV_ALIGN_TOP_MID, 0, px(46));
 
         scanStatusLbl = lv_label_create(scanOverlay);
@@ -662,7 +662,7 @@ else if (WiFi.status() != WL_CONNECTED)
             {
                 case TerraPixelLink::Connected:
                     text = "Connected";
-                    col = lv_color_hex(0x3ddc84); // the dial's Run/Done green
+                    col = Palette::ok(); // the dial's Run/Done green
                     break;
                 case TerraPixelLink::NotFound:
                     text = "Not found";
@@ -825,6 +825,34 @@ else if (WiFi.status() != WL_CONNECTED)
         restyleSleepChips();
     }
 
+    // Theme: two chips. The UI takes its colours from Palette as each
+    // screen is built, so the new scheme is applied by rebooting -- saved
+    // first, then a short delay so the chip can show its new state.
+    lv_obj_t *themeChips[2] = {nullptr};
+    lv_obj_t *themeChipLbls[2] = {nullptr};
+    const char *THEME_LABELS[2] = {"Dark", "Light"};
+
+    void restyleThemeChips()
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            bool sel = (i == 1) == Config::get().lightTheme;
+            lv_obj_set_style_bg_color(themeChips[i], sel ? Palette::accent() : Palette::bgPanel(), 0);
+            lv_obj_set_style_text_color(themeChipLbls[i], sel ? Palette::accentFg() : Palette::textMuted(), 0);
+        }
+    }
+
+    void themeChipCb(lv_event_t *e)
+    {
+        bool light = (int)(intptr_t)lv_event_get_user_data(e) == 1;
+        if (light == Config::get().lightTheme) return;
+        Config::get().lightTheme = light;
+        Config::save();
+        restyleThemeChips();
+        lv_timer_t *t = lv_timer_create([](lv_timer_t *) { ESP.restart(); }, 400, nullptr);
+        lv_timer_set_repeat_count(t, 1);
+    }
+
 #if BOARD_HAS_LED_RING
     void sleepLedSliderCb(lv_event_t *e)
     {
@@ -879,6 +907,34 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_obj_t *invertRow = uiMakeRow(card, "Invert menu rotation");
         lv_obj_t *invertSw = uiMakeSwitch(invertRow, Config::get().invertMenuRotation);
         lv_obj_add_event_cb(invertSw, invertRotCb, LV_EVENT_VALUE_CHANGED, NULL);
+
+        lv_obj_t *themeRow = uiMakeRow(card, "Theme");
+        lv_obj_t *themeChipRow = lv_obj_create(themeRow);
+        lv_obj_set_size(themeChipRow, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(themeChipRow, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(themeChipRow, 0, 0);
+        lv_obj_set_style_pad_all(themeChipRow, 0, 0);
+        lv_obj_set_style_pad_column(themeChipRow, px(4), 0);
+        lv_obj_clear_flag(themeChipRow, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(themeChipRow, LV_FLEX_FLOW_ROW);
+        for (int i = 0; i < 2; i++)
+        {
+            lv_obj_t *chip = lv_obj_create(themeChipRow);
+            lv_obj_set_size(chip, px(46), px(26));
+            lv_obj_set_style_radius(chip, px(13), 0);
+            lv_obj_set_style_border_width(chip, 0, 0);
+            lv_obj_set_style_pad_all(chip, 0, 0);
+            lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_set_ext_click_area(chip, px(4));
+            lv_obj_add_event_cb(chip, themeChipCb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+            lv_obj_t *lbl = lv_label_create(chip);
+            lv_label_set_text(lbl, THEME_LABELS[i]);
+            lv_obj_set_style_text_font(lbl, &UI_FONT_12, 0);
+            lv_obj_center(lbl);
+            themeChips[i] = chip;
+            themeChipLbls[i] = lbl;
+        }
+        restyleThemeChips();
 
         lv_obj_t *sleepRow = uiMakeRow(card, "Sleep after");
         lv_obj_t *chipRow = lv_obj_create(sleepRow);
