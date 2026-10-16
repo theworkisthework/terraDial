@@ -1,11 +1,11 @@
 #pragma once
 #include <lvgl.h>
 
-// The easter egg: a spirograph. Turn the knob to change the gears, watch
+// A spirograph. Turn the knob to change the gears, watch
 // the curve draw itself, then have the plotter draw it for real.
 //
-// Reached only by the unlock on Settings > About (see ui_settings.cpp) --
-// it's not on the dial.
+// Opened from the Spirograph button on Settings > About, or from the top of
+// Jobs while "Spirograph in Jobs" is on -- it's not on the dial.
 //
 // The maths is the classic toy's: a gear of `gear` teeth rolling inside a
 // ring of `ring` teeth, with the pen in a hole `pen`% of the way out from

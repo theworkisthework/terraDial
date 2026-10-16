@@ -20,9 +20,11 @@ namespace UiNav
     // the machine is one tap rather than back-out-rotate-open.
     void goEstop();
 
-    // Opens the spirograph easter egg (ui_spiro.h). Only the unlock on
-    // Settings > About calls this.
+    // Opens the spirograph (ui_spiro.h) from Settings > About.
     void goSpiro();
+
+    // Opens Asteroids (ui_asteroids.h) from Settings > About.
+    void goAsteroids();
 
     // True while the home dial is the screen showing.
     bool isOnDial();
