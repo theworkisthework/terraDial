@@ -647,7 +647,24 @@ void FluidNCClient::applyState(const char *state)
     else if (!strncmp(state, "Alarm", 5)) next = MachineMode::Alarm;
     else if (!strncmp(state, "Home",  4)) next = MachineMode::Homing;
     else if (!strncmp(state, "Sleep", 5)) next = MachineMode::Idle;
-    else if (!strncmp(state, "Idle",  4))
+    bool idle = !strncmp(state, "Idle", 4);
+    if (!idle) jobIdling_ = false;
+    if (idle && status_.jobActive && status_.mode == MachineMode::Run)
+    {
+        // Mid-job pen lift or drop, most likely: stay Run (and the job up)
+        // until it's been idle long enough to really be over. Otherwise
+        // every screen and the ring follow the machine flicking Run/Idle.
+        uint32_t now = millis();
+        if (!jobIdling_)
+        {
+            jobIdling_ = true;
+            jobIdleSince_ = now;
+        }
+        if (now - jobIdleSince_ < JOB_GAP_MS) return;
+        jobIdling_ = false;
+    }
+
+    if (idle)
     {
         bool wasJob = (status_.mode == MachineMode::Run) && (millis() - runStartedAt_ > MIN_JOB_MS);
         if (wasJob) { next = MachineMode::Done; doneAt_ = millis(); }
@@ -657,6 +674,14 @@ void FluidNCClient::applyState(const char *state)
 
     if (next == MachineMode::Run && status_.mode != MachineMode::Run) runStartedAt_ = millis();
     if (next != MachineMode::Run && next != MachineMode::Hold) status_.jobActive = false;
+    // Every mode change, with the word FluidNC actually sent: the screens
+    // follow these, so this is the record to read when one jumps about.
+    if (next != status_.mode)
+    {
+        const char *bar = strchr(state, '|');
+        int len = bar ? (int)(bar - state) : (int)strlen(state);
+        Serial.printf("[fluidnc] state %.*s -> mode %d, job %d\n", len, state, (int)next, status_.jobActive);
+    }
     status_.mode = next;
 }
 

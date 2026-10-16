@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include "ui_nav.h"
 #include "ui_scale.h"
 #include <lvgl.h>
@@ -55,6 +56,7 @@ namespace
     void goTo(int index, lv_scr_load_anim_t anim)
     {
         if (currentIndex == index) return;
+        Serial.printf("[nav] screen %d -> %d\n", currentIndex, index);
         if (currentIndex == JOB_PROGRESS_SCREEN_INDEX) jobFlowActive = false;
         currentIndex = index;
         lv_scr_load_anim(screens[currentIndex], anim, 120, 0, false); // was 180 -- snappier screen switching
@@ -139,13 +141,31 @@ namespace
     // check fired this on every single knob-jog tick, yanking the screen
     // to Job Progress and immediately back to Dial regardless of what
     // screen the user was actually on.
+    // How long a job has to have looked finished before Job Progress hands
+    // the screen back to the dial. One Idle report isn't proof: a single
+    // stray one mid-job used to send the screen to the dial, and the next
+    // Run report straight back -- a panel flicking between the two that
+    // you couldn't hit Pause on.
+    const uint32_t JOB_END_SETTLE_MS = 2000;
+
     void checkAutoNav()
     {
         static MachineMode lastMode = MachineMode::Boot;
         static bool lastJobActive = false;
+        static bool ended = false;   // the job looked finished...
+        static uint32_t endedAt = 0; // ...at this time
 
         MachineMode mode = fluidNC.status().mode;
         bool jobActive = fluidNC.status().jobActive;
+        bool idle = (mode == MachineMode::Idle || mode == MachineMode::Done);
+
+        if (!idle || !jobFlowActive) ended = false;
+        if (ended && millis() - endedAt >= JOB_END_SETTLE_MS)
+        {
+            ended = false;
+            jobFlowActive = false;
+            goTo(DIAL_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
+        }
 
         // A job we didn't start is recognised from the status report's SD:
         // field, which can arrive a report or two after the state flips to
@@ -169,11 +189,10 @@ namespace
             goTo(JOB_PROGRESS_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
         }
         else if (jobFlowActive &&
-                 (lastMode == MachineMode::Run || lastMode == MachineMode::Hold) &&
-                 (mode == MachineMode::Idle || mode == MachineMode::Done))
+                 (lastMode == MachineMode::Run || lastMode == MachineMode::Hold) && idle)
         {
-            jobFlowActive = false;
-            goTo(DIAL_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
+            if (!ended) endedAt = millis(); // the dial, if it's still over in JOB_END_SETTLE_MS
+            ended = true;
         }
         lastMode = mode;
     }
@@ -232,6 +251,7 @@ namespace UiNav
 
         int32_t delta = jogWheel.takeRotationDelta();
         ButtonEvent ev = jogWheel.takeButtonEvent();
+        if (ev != ButtonEvent::None) Serial.printf("[nav] knob button %d\n", (int)ev);
 
         // A real hand on the knob ends a demo tour on the spot; with no
         // real input, the tour may supply its next scripted turn or click,
