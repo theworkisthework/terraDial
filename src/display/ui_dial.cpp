@@ -309,11 +309,11 @@ namespace
     {
         switch (mode)
         {
-            case MachineMode::Run:    return lv_color_hex(0x3ddc84);
-            case MachineMode::Hold:   return lv_color_hex(0xffa726);
+            case MachineMode::Run:    return Palette::ok();
+            case MachineMode::Hold:   return Palette::warn();
             case MachineMode::Alarm:  return Palette::accent();          // the terraForge red
             case MachineMode::Homing: return Palette::accentSecondary(); // file-browser blue
-            case MachineMode::Done:   return lv_color_hex(0x3ddc84);
+            case MachineMode::Done:   return Palette::ok();
             case MachineMode::Boot:   return Palette::textFaint();
             case MachineMode::Idle:
             default:                  return Palette::textMuted();

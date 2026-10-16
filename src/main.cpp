@@ -4,6 +4,7 @@
 #include "version.h"
 #include "ui_scale.h"
 #include "config/settings.h"
+#include "palette.h"
 #include "display/lgfx_config.h"
 #include "display/ui_nav.h"
 #include "display/ui_dial.h"
@@ -309,6 +310,7 @@ void setup()
     Serial.printf("terraDial boot -- firmware %s on %s\n", Version::label(), BOARD_NAME);
 
     Config::begin();
+    Palette::setLight(Config::get().lightTheme); // before any screen is built
 
     initPowerRails();
     initTouchAndDisplay();

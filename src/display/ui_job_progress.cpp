@@ -220,7 +220,7 @@ lv_obj_t *uiJobProgressCreate()
 
     percentLbl = lv_label_create(controls);
     lv_obj_set_style_text_font(percentLbl, &UI_FONT_32, 0);
-    lv_obj_set_style_text_color(percentLbl, lv_color_white(), 0);
+    lv_obj_set_style_text_color(percentLbl, Palette::text(), 0);
     lv_obj_align(percentLbl, LV_ALIGN_CENTER, 0, px(-14));
 
     lv_obj_t *pauseBtn = lv_btn_create(controls);
