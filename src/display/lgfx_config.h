@@ -328,16 +328,30 @@ public:
 
 #endif
 
+inline void backlightWriteDuty(uint32_t duty)
+{
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+    ledcWrite(PIN_LCD_BACKLIGHT, duty);
+#else
+    ledcWrite(BACKLIGHT_PWM_CHANNEL, duty);
+#endif
+}
+
 inline void backlightInit()
 {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+    // Arduino-ESP32 3.x: LEDC is addressed by pin; the channel is picked for us.
+    ledcAttach(PIN_LCD_BACKLIGHT, BACKLIGHT_PWM_FREQ, BACKLIGHT_PWM_RESOLUTION);
+#else
     ledcSetup(BACKLIGHT_PWM_CHANNEL, BACKLIGHT_PWM_FREQ, BACKLIGHT_PWM_RESOLUTION);
     ledcAttachPin(PIN_LCD_BACKLIGHT, BACKLIGHT_PWM_CHANNEL);
-    ledcWrite(BACKLIGHT_PWM_CHANNEL, 255); // full brightness by default
+#endif
+    backlightWriteDuty(255); // full brightness by default
 }
 
 // percent: 0-100
 inline void backlightSet(uint8_t percent)
 {
     if (percent > 100) percent = 100;
-    ledcWrite(BACKLIGHT_PWM_CHANNEL, (percent * 255) / 100);
+    backlightWriteDuty((percent * 255) / 100);
 }
