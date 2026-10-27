@@ -47,6 +47,10 @@ struct AppSettings
     // Light colour scheme (terraForge's light theme) instead of dark. Read
     // once at boot, so flipping it in Settings reboots the panel.
     bool lightTheme;
+    // Whether a spirograph plot homes ($H) before and after drawing. Off for
+    // a machine with no end stops: the plot then draws in work coordinates
+    // from wherever the user has set zero.
+    bool spiroHome;
     char penUpCmd[48];
     char penDownCmd[48];
     char wifiSsid[33];

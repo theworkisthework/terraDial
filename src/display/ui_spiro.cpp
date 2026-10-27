@@ -171,6 +171,11 @@ namespace
     // sequence is the Park macro's (ui_park.cpp), for the same reasons --
     // see there.
     //
+    // A machine with no end stops can't do any of that, so with "Home before
+    // plotting" off (Settings) the plot skips the homing, both times, and
+    // draws in work coordinates from the zero the user has set: the
+    // drawing's corner at X0 Y0, running out to +size on both axes.
+    //
     // And after it: once the last line has been drawn (the final pen up
     // among them), the machine homes again and then runs out along Y to
     // MARGIN_MM past the top of the drawing -- the gantry is off the paper,
@@ -198,6 +203,7 @@ namespace
         uint32_t liftTicket = 0;
         float cx = 0, cy = 0, scale = 1; // mm per tooth
         float clearY = 0; // where the gantry goes once it's done
+        bool homed = true; // homes before and after, and draws in G53
         int next = 0;   // next line to send
         int total = 0;  // lines in the whole plot
         uint32_t ticket = 0;
@@ -240,18 +246,19 @@ namespace
         if (within == 0) { snprintf(out, n, "%s", cfg.penUpCmd); return; }
         if (within == 2) { snprintf(out, n, "%s", cfg.penDownCmd); return; }
         // G53 is per line, not modal: every move says it's in machine
-        // coordinates.
+        // coordinates. Without homing the moves are in work coordinates.
+        const char *cs = plot.homed ? "G53 " : "";
         if (within == 1)
         {
             rawPoint(copy * (curve.perCopy + 1), x, y);
-            snprintf(out, n, "G53 G0 X%.3f Y%.3f", plot.cx + x * plot.scale, plot.cy + y * plot.scale);
+            snprintf(out, n, "%sG0 X%.3f Y%.3f", cs, plot.cx + x * plot.scale, plot.cy + y * plot.scale);
             return;
         }
         rawPoint(linePoint(i), x, y);
         if (within == COPY_LEAD) // each copy's first draw move sets the feed
-            snprintf(out, n, "G53 G1 F%.0f X%.3f Y%.3f", FEED_MM_MIN, plot.cx + x * plot.scale, plot.cy + y * plot.scale);
+            snprintf(out, n, "%sG1 F%.0f X%.3f Y%.3f", cs, FEED_MM_MIN, plot.cx + x * plot.scale, plot.cy + y * plot.scale);
         else
-            snprintf(out, n, "G53 G1 X%.3f Y%.3f", plot.cx + x * plot.scale, plot.cy + y * plot.scale);
+            snprintf(out, n, "%sG1 X%.3f Y%.3f", cs, plot.cx + x * plot.scale, plot.cy + y * plot.scale);
     }
 
     void stopPlot(const char *why)
@@ -272,7 +279,7 @@ namespace
     }
 
     // Why the machine can't take a plot right now, or nullptr if it can.
-    // An alarm is fine: homing is what clears one.
+    // An alarm is fine when homing: that's what clears one.
     const char *notReadyReason()
     {
         const FluidNCStatus &st = fluidNC.status();
@@ -282,6 +289,7 @@ namespace
         const AppSettings &cfg = Config::get();
         if (!cfg.penUpCmd[0]) return "Set a pen-up command in Settings";
         if (!cfg.penDownCmd[0]) return "Set a pen-down command in Settings";
+        if (!cfg.spiroHome && st.mode == MachineMode::Alarm) return "Clear the alarm first";
         // Done is the few seconds of celebration after a job: idle really.
         if (st.jobActive || (st.mode != MachineMode::Idle && st.mode != MachineMode::Done &&
                              st.mode != MachineMode::Alarm))
@@ -302,7 +310,8 @@ namespace
     {
         plot = Plot();
         plot.active = true;
-        plot.cx = plot.cy = MARGIN_MM + sizeMm / 2.0f;
+        plot.homed = Config::get().spiroHome;
+        plot.cx = plot.cy = (plot.homed ? MARGIN_MM : 0.0f) + sizeMm / 2.0f;
         plot.clearY = fminf(plot.cy + sizeMm / 2.0f + MARGIN_MM, MACHINE_Y_MAX_MM);
         // Sized by the drawing itself, not the preview's frame: "100mm" is
         // the pattern's own width.
@@ -341,6 +350,17 @@ namespace
                         if (elapsed >= LIFT_TIMEOUT_MS) stopPlot("No reply to pen lift");
                         return false;
                     }
+                }
+                if (!plot.homed)
+                {
+                    if (elapsed >= LIFT_SETTLE_MS && (st.mode == MachineMode::Idle || st.mode == MachineMode::Done))
+                    {
+                        setPhase(Phase::Stream);
+                        plot.startedAt = millis();
+                        return true;
+                    }
+                    if (elapsed >= LIFT_TIMEOUT_MS) stopPlot("Machine didn't settle");
+                    return false;
                 }
                 if (elapsed >= LIFT_SETTLE_MS && (st.mode == MachineMode::Idle || st.mode == MachineMode::Alarm))
                 {
@@ -388,6 +408,11 @@ namespace
         {
             case Phase::AwaitDrawn:
                 if (st.mode == MachineMode::Alarm) stopPlot("Stopped: machine alarmed");
+                else if (elapsed >= LIFT_SETTLE_MS && idle && !plot.homed)
+                {
+                    plot.active = false;
+                    setResult("Done");
+                }
                 else if (elapsed >= LIFT_SETTLE_MS && idle)
                 {
                     fluidNC.home();
@@ -795,7 +820,7 @@ namespace
     {
         if (plot.active) return;
         const char *why = notReadyReason();
-        lv_label_set_text(confirmNote, why ? why : "Lifts the pen and homes, draws 25mm in from home, then homes again.");
+        lv_label_set_text(confirmNote, why ? why : Config::get().spiroHome ? "Lifts the pen and homes, draws 25mm in from home, then homes again." : "Lifts the pen and draws from your zero, its corner at X0 Y0.");
         lv_obj_set_style_text_color(confirmNote, why ? Palette::accent() : Palette::textMuted(), 0);
         refreshSizeChips();
         lv_obj_clear_flag(confirmBox, LV_OBJ_FLAG_HIDDEN);
