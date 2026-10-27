@@ -1101,6 +1101,12 @@ else if (WiFi.status() != WL_CONNECTED)
         Config::save();
     }
 
+    void spiroHomeCb(lv_event_t *e)
+    {
+        Config::get().spiroHome = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
+        Config::save();
+    }
+
     void openSpiroCb(lv_event_t *) { UiNav::goSpiro(); }
     void openAsteroidsCb(lv_event_t *) { UiNav::goAsteroids(); }
 
@@ -1109,6 +1115,16 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_obj_t *row = uiMakeRow(card, "Spirograph in Jobs");
         lv_obj_t *sw = uiMakeSwitch(row, Config::get().spiroInJobs);
         lv_obj_add_event_cb(sw, spiroJobsCb, LV_EVENT_VALUE_CHANGED, NULL);
+
+        lv_obj_t *homeRow = uiMakeRow(card, "Home before plotting");
+        lv_obj_t *homeSw = uiMakeSwitch(homeRow, Config::get().spiroHome);
+        lv_obj_add_event_cb(homeSw, spiroHomeCb, LV_EVENT_VALUE_CHANGED, NULL);
+        lv_obj_t *homeHint = lv_label_create(card);
+        lv_label_set_text(homeHint, "Off for a plotter with no end stops: the spirograph then draws from the zero you have set, its corner at X0 Y0.");
+        lv_label_set_long_mode(homeHint, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(homeHint, lv_pct(100));
+        lv_obj_set_style_text_font(homeHint, &UI_FONT_12, 0);
+        lv_obj_set_style_text_color(homeHint, Palette::textMuted(), 0);
 
         lv_obj_t *lbl;
         lv_obj_t *spiroBtn = uiMakeButton(card, LUCIDE_DRAFTING_COMPASS " Spirograph", &lbl);

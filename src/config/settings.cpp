@@ -56,6 +56,7 @@ namespace Config
         settings.showIdleLogo = prefs.getBool("idleLogo", true);
         settings.invertMenuRotation = prefs.getBool("invMenuRot", false);
         settings.spiroInJobs = prefs.getBool("spiroJobs", true);
+        settings.spiroHome = prefs.getBool("spiroHome", true);
         copyToBuf(settings.penUpCmd, sizeof(settings.penUpCmd), prefs.getString("penUpCmd", PEN_UP_CMD));
         copyToBuf(settings.penDownCmd, sizeof(settings.penDownCmd), prefs.getString("penDownCmd", PEN_DOWN_CMD));
         copyToBuf(settings.wifiSsid, sizeof(settings.wifiSsid), prefs.getString("wifiSsid", WIFI_SSID));
@@ -76,6 +77,7 @@ namespace Config
         prefs.putBool("idleLogo", settings.showIdleLogo);
         prefs.putBool("invMenuRot", settings.invertMenuRotation);
         prefs.putBool("spiroJobs", settings.spiroInJobs);
+        prefs.putBool("spiroHome", settings.spiroHome);
         prefs.putString("penUpCmd", settings.penUpCmd);
         prefs.putString("penDownCmd", settings.penDownCmd);
         prefs.putString("wifiSsid", settings.wifiSsid);
