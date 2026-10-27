@@ -14,7 +14,6 @@
 #include "radial_keyboard.h"
 #include "icon_logo.h"
 #include "fancy_qr.h"
-#include "../input/mic.h"
 #include "../input/haptics.h"
 #include "branding.h"
 #include "version.h"
@@ -1094,21 +1093,16 @@ else if (WiFi.status() != WL_CONNECTED)
         Demo::set(lv_obj_has_state(sw, LV_STATE_CHECKED));
     }
 
-    // The spirograph lives at the top of Jobs by default. Switched out of
-    // there, this is where it lives instead: an Open button appears here,
-    // above Demo mode.
-    lv_obj_t *spiroOpenBtn = nullptr;
-
+    // The spirograph is also first in Jobs by default; the switch below
+    // takes it out of there. Its Open button here is always available.
     void spiroJobsCb(lv_event_t *e)
     {
-        bool inJobs = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
-        Config::get().spiroInJobs = inJobs;
+        Config::get().spiroInJobs = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
         Config::save();
-        if (inJobs) lv_obj_add_flag(spiroOpenBtn, LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_clear_flag(spiroOpenBtn, LV_OBJ_FLAG_HIDDEN);
     }
 
     void openSpiroCb(lv_event_t *) { UiNav::goSpiro(); }
+    void openAsteroidsCb(lv_event_t *) { UiNav::goAsteroids(); }
 
     void addSpiroControls(lv_obj_t *card)
     {
@@ -1117,10 +1111,12 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_obj_add_event_cb(sw, spiroJobsCb, LV_EVENT_VALUE_CHANGED, NULL);
 
         lv_obj_t *lbl;
-        spiroOpenBtn = uiMakeButton(card, LUCIDE_DRAFTING_COMPASS " Spirograph", &lbl);
+        lv_obj_t *spiroBtn = uiMakeButton(card, LUCIDE_DRAFTING_COMPASS " Spirograph", &lbl);
         lv_obj_set_style_text_font(lbl, &UI_ICONS_12, 0); // icon + word
-        lv_obj_add_event_cb(spiroOpenBtn, openSpiroCb, LV_EVENT_CLICKED, NULL);
-        if (Config::get().spiroInJobs) lv_obj_add_flag(spiroOpenBtn, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_event_cb(spiroBtn, openSpiroCb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t *gameBtn = uiMakeButton(card, "Asteroids", nullptr);
+        lv_obj_add_event_cb(gameBtn, openAsteroidsCb, LV_EVENT_CLICKED, NULL);
     }
 
     // Demo mode (net/demo_mode.h): a simulated plotter and lights, so the
@@ -1143,42 +1139,12 @@ else if (WiFi.status() != WL_CONNECTED)
         lv_obj_set_style_text_color(hint, Palette::textMuted(), 0);
     }
 
-    // The easter egg's way in: tap the logo three times while saying
-    // "terraPen". It can't actually tell what was said -- the mic only
-    // knows someone was talking (input/mic.h) -- but nobody needs to know
-    // that. Seven quick taps also works, silently, on any board: the
-    // CrowPanel has no mic, and a mic that fails shouldn't lock the toy
-    // away for good.
-    lv_obj_t *aboutLogo = nullptr;
-    const int VOICE_TAPS = 3;
-    const int QUIET_TAPS = 7;
-    const uint32_t TAP_GAP_MS = 700;   // a pause longer than this starts over
-    const uint32_t VOICE_WINDOW_MS = 2500;
-    uint32_t lastTapAt = 0;
-    int taps = 0;
-
-    void logoTapCb(lv_event_t *)
-    {
-        uint32_t now = millis();
-        taps = (now - lastTapAt <= TAP_GAP_MS) ? taps + 1 : 1;
-        lastTapAt = now;
-
-        bool unlocked = (taps >= VOICE_TAPS && Mic::heardVoiceWithin(VOICE_WINDOW_MS)) || taps >= QUIET_TAPS;
-        if (!unlocked) return;
-        taps = 0;
-        Haptics::detent();
-        UiNav::goSpiro();
-    }
-
     lv_obj_t *makeAboutCard()
     {
         lv_obj_t *card = makeCardShell("ABOUT");
 
         lv_obj_t *logo = lv_img_create(card);
         lv_img_set_src(logo, &iconLogo);
-        lv_obj_add_flag(logo, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(logo, logoTapCb, LV_EVENT_CLICKED, NULL);
-        aboutLogo = logo;
         // Alpha-only: recolor_opa must be on or it draws nothing. This is
         // also what flips the print artwork's black stroke to light-on-dark.
         lv_obj_set_style_img_recolor(logo, Palette::text(), 0);
@@ -1461,10 +1427,6 @@ void uiSettingsOpenWifiSetup()
 void uiSettingsUpdate()
 {
     if (!wifiStatusLbl) return;
-
-    // Listen only while the About card is actually in front of someone:
-    // the mic switches itself off a second after this stops asking.
-    if (openPanel == 3 && lv_scr_act() == screenRoot) Mic::listenFor(1000);
 
     // Demo mode can also be left by tapping the DEMO tag (demo_badge.cpp);
     // keep the switch saying what's true.

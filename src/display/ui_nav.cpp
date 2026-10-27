@@ -14,6 +14,7 @@
 #include "ui_alarm_clear.h"
 #include "ui_park.h"
 #include "ui_spiro.h"
+#include "ui_asteroids.h"
 #include "../input/encoder.h"
 #include "radial_keyboard.h"
 #include "fancy_qr.h"
@@ -24,7 +25,7 @@
 
 namespace
 {
-    const int SCREEN_COUNT = 12;
+    const int SCREEN_COUNT = 13;
     const int DIAL_SCREEN_INDEX = 0;
     const int JOG_SCREEN_INDEX = 1;
     const int FILES_SCREEN_INDEX = 2;
@@ -37,6 +38,7 @@ namespace
     const int ALARM_CLEAR_SCREEN_INDEX = 9;
     const int PARK_SCREEN_INDEX = 10;
     const int SPIRO_SCREEN_INDEX = 11; // the easter egg -- no dial slot
+    const int ASTEROIDS_SCREEN_INDEX = 12; // the other one
 
     lv_obj_t *screens[SCREEN_COUNT];
     int currentIndex = DIAL_SCREEN_INDEX;
@@ -64,6 +66,7 @@ namespace
         if (currentIndex == FILES_SCREEN_INDEX) uiFilesSetFocused(true);
         if (currentIndex == LIGHTS_SCREEN_INDEX) uiLightsOnShow();
         if (currentIndex == SPIRO_SCREEN_INDEX) uiSpiroOnShow();
+        if (currentIndex == ASTEROIDS_SCREEN_INDEX) uiAsteroidsOnShow();
 
         // Walking into Progress on a live job re-arms the flag that the
         // walk *out* cleared, so the job still hands the screen back to the
@@ -214,6 +217,7 @@ namespace UiNav
         screens[ALARM_CLEAR_SCREEN_INDEX] = uiAlarmClearCreate();
         screens[PARK_SCREEN_INDEX] = uiParkCreate();
         screens[SPIRO_SCREEN_INDEX] = uiSpiroCreate();
+        screens[ASTEROIDS_SCREEN_INDEX] = uiAsteroidsCreate();
 
         uiDialSetHandlers(onDialOpen, onDialStatusTap);
 
@@ -418,6 +422,17 @@ namespace UiNav
             return;
         }
 
+        // Asteroids: the knob turns the ship, a click fires, and a long
+        // press asks before quitting -- the game owns back, so it isn't
+        // thrown away by a thumb that held the knob a moment too long.
+        if (currentIndex == ASTEROIDS_SCREEN_INDEX)
+        {
+            if (delta != 0) uiAsteroidsHandleRotate(delta);
+            if (ev == ButtonEvent::Click) uiAsteroidsHandleClick();
+            else if (ev == ButtonEvent::LongPress) uiAsteroidsHandleLongPress();
+            return;
+        }
+
         // Defensive default -- every screen above handles itself, but a new
         // one added without a case still gets the universal back gesture.
         if (ev == ButtonEvent::LongPress) goTo(DIAL_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
@@ -439,6 +454,11 @@ namespace UiNav
     void goSpiro()
     {
         goTo(SPIRO_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
+    }
+
+    void goAsteroids()
+    {
+        goTo(ASTEROIDS_SCREEN_INDEX, LV_SCR_LOAD_ANIM_FADE_ON);
     }
 
     bool isOnDial() { return currentIndex == DIAL_SCREEN_INDEX; }
