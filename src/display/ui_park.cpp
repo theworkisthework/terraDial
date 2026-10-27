@@ -117,7 +117,7 @@ lv_obj_t *uiParkCreate()
     lv_obj_t *titleLbl = lv_label_create(scr);
     lv_label_set_text(titleLbl, "Park for photo");
     lv_obj_set_style_text_font(titleLbl, &UI_FONT_16, 0);
-    lv_obj_set_style_text_color(titleLbl, lv_color_white(), 0);
+    lv_obj_set_style_text_color(titleLbl, Palette::text(), 0);
     lv_obj_align(titleLbl, LV_ALIGN_CENTER, 0, px(-28));
 
     lv_obj_t *bodyLbl = lv_label_create(scr);
