@@ -1446,11 +1446,22 @@ void G_DoCompleted (void)
 		break;
 	    }                
 	} 
-	else 
-	    wminfo.next = gamemap;          // go to next level 
+	else
+	    wminfo.next = gamemap;          // go to next level
     }
-		 
-    wminfo.maxkills = totalkills; 
+
+    // terraDial: the WAD has however many levels its generator made. Past
+    // the last one, go round again from the first rather than asking for a
+    // level that isn't there.
+    if (gamemode == commercial)
+    {
+        char nextname[9];
+        M_snprintf(nextname, sizeof(nextname), "MAP%02i", wminfo.next + 1);
+        if (W_CheckNumForName(nextname) < 0)
+            wminfo.next = 0;
+    }
+
+    wminfo.maxkills = totalkills;
     wminfo.maxitems = totalitems; 
     wminfo.maxsecret = totalsecret; 
     wminfo.maxfrags = 0; 
@@ -1498,6 +1509,9 @@ void G_WorldDone (void)
     if (secretexit) 
 	players[consoleplayer].didsecret = true; 
 
+    // terraDial: no story screens between levels -- they'd show the
+    // original game's text, and terrapen.wad has its own levels.
+#if 0
     if ( gamemode == commercial )
     {
 	switch (gamemap)
@@ -1514,7 +1528,8 @@ void G_WorldDone (void)
 	    break;
 	}
     }
-} 
+#endif
+}
  
 void G_DoWorldDone (void) 
 {        

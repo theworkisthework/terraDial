@@ -309,6 +309,29 @@ def door_panel():
     return cv
 
 
+def exit_switch(on):
+    """The exit: a steel plate on the wall with a coral lever -- up when
+    off, thrown down with a lime light when pressed. 64x128, one cell of
+    a 128-high room. (Named after one of the engine's built-in switch pairs
+    so it swaps when used; the picture is ours.)"""
+    cv = Canvas(64, 128, idx("grey", 3))
+    hatch(cv, 45, 9, idx("lime", 20), wobble=0.4, seed=10)   # the wall around it, as WALL1
+    plate = [(14, 36), (50, 36), (50, 100), (14, 100)]
+    cv.polygon(plate, idx("grey", 22))
+    cv.outline(plate, idx("grey", 2), 2)
+    for y in range(44, 96, 6):
+        cv.line(18, y, 46, y, idx("grey", 18))
+    pivot = (32, 68)
+    tip = (32, 88) if on else (32, 46)
+    cv.line(pivot[0], pivot[1], tip[0], tip[1], idx("grey", 2), 5)
+    cv.line(pivot[0], pivot[1], tip[0], tip[1], idx("coral", 21), 3)
+    cv.circle(tip[0], tip[1], 4, idx("grey", 2), fill=idx("coral", 22))
+    cv.circle(pivot[0], pivot[1], 3, idx("grey", 2), fill=idx("grey", 10))
+    light = idx("lime", 24) if on else idx("grey", 6)
+    cv.circle(32, 28, 4, idx("grey", 2), fill=light)
+    return cv
+
+
 def door_track():
     cv = Canvas(16, 128, idx("grey", 5))
     for x in (3, 8, 12):
@@ -536,8 +559,6 @@ def level01():
     """MAP01, "First Sketch": a start room, a corridor out to an open-air
     courtyard, a hall with a stepped dais to the south, and a side room
     that loops back to the start. Carved into a grid of solid wall."""
-    import mapbuild
-
     W, H = 30, 21
     g = [["#"] * W for _ in range(H)]
 
@@ -572,13 +593,18 @@ def level01():
                      (17, 13, "S"), (24, 17, "B"), (21, 15, "a"),
                      (4, 14, "B"), (6, 17, "B"), (2, 17, "h"), (7, 13, "i")):
         put(c, r, ch)
-    rows = ["".join(r) for r in g]
-    check_doors(rows)
+    put(24, 19, "X")            # the exit switch, on the hall's south wall
+    return ["".join(r) for r in g]
 
+
+def legend():
+    """What each map character means -- shared by First Sketch and the
+    generated levels (levelgen.py)."""
     # 128 high, to match the door texture (see door_panel).
     room = dict(floor=0, ceil=128, floorpic="TDFLOOR", ceilpic="TDCEIL", light=224, wall="WALL1")
     terrain = {
         ".": room,
+        ";": dict(room, light=208, wall="WALL2"),
         ":": dict(room, ceil=112, light=176, wall="WALL2"),
         ",": dict(floor=0, ceil=288, floorpic="TDPAPER", ceilpic="F_SKY1", light=255, wall="WALL3"),
         "p": dict(floor=0, ceil=128, floorpic="TDPAPER", ceilpic="TDCEIL", light=240, wall="WALL3"),
@@ -596,14 +622,38 @@ def level01():
         "h": (2011, "."),      # spare nib
         "a": (2018, "."),      # sheet of card
     }
-    level = mapbuild.Level(rows, terrain, things, lambda p: p["wall"])
-    return mapbuild.build_map("MAP01", level)
+    # S1 Exit Level, on a switch the engine swaps when it's pressed.
+    specials = {"X": (11, "SW1BRCOM")}
+    return terrain, things, specials
+
+
+def build_levels(count=10, seed=None):
+    """MAP01 is First Sketch; the rest are generated. The seed picks the
+    set: TERRAPEN_SEED in the environment, or a fixed default so builds
+    repeat."""
+    import os
+    import levelgen
+    import mapbuild
+
+    if seed is None:
+        seed = int(os.environ.get("TERRAPEN_SEED", "2026"))
+    terrain, things, specials = legend()
+    maps = [("MAP01", level01())]
+    for n in range(2, count + 1):
+        maps.append(("MAP%02d" % n, levelgen.generate(n, seed * 100 + n)))
+    lumps = []
+    for name, rows in maps:
+        check_doors(rows)
+        assert levelgen.reachable(rows), "%s: can't reach the exit" % name
+        level = mapbuild.Level(rows, terrain, things, lambda p: p["wall"], specials)
+        lumps += mapbuild.build_map(name, level)
+    return lumps
 
 
 def check_doors(rows):
     """Every door must sit in a one-cell gap: open on two opposite sides,
     wall on the other two."""
-    solid = lambda c, r: rows[r][c] == "#"
+    solid = lambda c, r: rows[r][c] in "#X"  # an exit switch is a wall too
     for r, row in enumerate(rows):
         for c, ch in enumerate(row):
             if ch != "D":
@@ -649,9 +699,10 @@ def build():
                             ("WALL1", "TDWALL1", 128, 128), ("WALL2", "TDWALL2", 128, 128),
                             ("WALL3", "TDWALL3", 128, 128), ("STEP", "TDSTEP", 64, 64),
                             ("DOOR1", "TDDOOR", 64, 128), ("TRACK", "TDTRACK", 16, 128),
+                            ("SW1BRCOM", "TDSWOFF", 64, 128), ("SW2BRCOM", "TDSWON", 64, 128),
                             ("SKY1", "TDSKY", 256, 128)])
     lumps += [("PNAMES", pn), ("TEXTURE1", t1)]
-    lumps += level01()
+    lumps += build_levels()
 
     lumps.append(("S_START", b""))
     lumps += [("PISGA0", weapon_patch()), ("PISGB0", weapon_patch(-6, -8, ink=True)),
@@ -669,6 +720,7 @@ def build():
     lumps += [("P_START", b""), ("TDWALL1", patch(wall_hatch())), ("TDWALL2", patch(wall_stipple())),
               ("TDWALL3", patch(wall_contours())), ("TDSTEP", patch(step_edges())),
               ("TDDOOR", patch(door_panel())), ("TDTRACK", patch(door_track())),
+              ("TDSWOFF", patch(exit_switch(False))), ("TDSWON", patch(exit_switch(True))),
               ("TDSKY", patch(sky())), ("P_END", b"")]
     lumps += [("F_START", b""), ("TDFLOOR", flat(floor_rings())), ("TDCEIL", flat(ceil_contours())),
               ("TDPAPER", flat(paper_dots())), ("TDSTEPF", flat(step_top())),

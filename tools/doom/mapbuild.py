@@ -24,15 +24,17 @@ def name8(s):
 # ------------------------------------------------------------------ grid -> sectors and lines
 
 class Level:
-    def __init__(self, rows, terrain, things, wall_for):
+    def __init__(self, rows, terrain, things, wall_for, specials=None):
         """rows: the map, top row first. terrain: char -> sector properties
         (dict with floor, ceil, floorpic, ceilpic, light, door?) or None for
         solid. things: char -> (thing type, terrain char). wall_for: sector
-        properties -> wall texture name."""
+        properties -> wall texture name. specials: solid char -> (linedef
+        special, texture) for walls that do something, like an exit switch."""
         width = max(len(r) for r in rows)
         self.rows = [r.ljust(width) for r in rows]
         self.w, self.h = width, len(rows)
         self.terrain, self.things, self.wall_for = terrain, things, wall_for
+        self.specials = specials or {}
 
     def ground(self, c, r):
         """The terrain character under cell (c, r); None when solid."""
@@ -77,6 +79,13 @@ class Level:
     def sector_at(self, c, r):
         return self.sector_of.get((c, r))
 
+    def special_at(self, c, r):
+        """A solid cell's special character, or None for plain wall. A wall
+        facing a special cell carries it in place of a back sector."""
+        if 0 <= c < self.w and 0 <= r < self.h and self.rows[r][c] in self.specials:
+            return self.rows[r][c]
+        return None
+
     @staticmethod
     def pt(c, r):
         """Grid corner (c, r) in map units: x right, y up."""
@@ -84,7 +93,7 @@ class Level:
 
     def build_lines(self):
         """Unit edges between differing cells, then merged into runs."""
-        edges = []  # (v1, v2, front sector, back sector or None)
+        edges = []  # (v1, v2, front sector, back sector -- or None, or a special's char)
 
         # Vertical edges: between (c-1, r) on the left and (c, r) on the right.
         for c in range(self.w + 1):
@@ -96,9 +105,9 @@ class Level:
                 # A line's front is on its right. Going up (bottom -> top),
                 # the right is +x.
                 if left is None:
-                    edges.append((bottom, top, right, None))
+                    edges.append((bottom, top, right, self.special_at(c - 1, r)))
                 elif right is None:
-                    edges.append((top, bottom, left, None))
+                    edges.append((top, bottom, left, self.special_at(c, r)))
                 else:
                     edges.append((bottom, top, right, left))
 
@@ -111,16 +120,16 @@ class Level:
                 west, east = self.pt(c, r), self.pt(c + 1, r)
                 # Going east, the right is -y (below).
                 if above is None:
-                    edges.append((west, east, below, None))
+                    edges.append((west, east, below, self.special_at(c, r - 1)))
                 elif below is None:
-                    edges.append((east, west, above, None))
+                    edges.append((east, west, above, self.special_at(c, r)))
                 else:
                     edges.append((west, east, below, above))
 
         # Doors want their lines' fronts facing out of the door sector.
         fixed = []
         for v1, v2, f, b in edges:
-            if b is not None and self.sectors[f].get("door") and not self.sectors[b].get("door"):
+            if isinstance(b, int) and self.sectors[f].get("door") and not self.sectors[b].get("door"):
                 v1, v2, f, b = v2, v1, b, f
             fixed.append((v1, v2, f, b))
 
@@ -279,9 +288,10 @@ def build_map(name, level, door_texture="DOOR1"):
     linedefs, sidedefs, segs = [], [], []
     for i, (v1, v2, f, b) in enumerate(level.lines):
         fp = level.sectors[f]
-        if b is None:
-            sidedefs.append((0, 0, "-", "-", level.wall_for(fp), f))
-            linedefs.append((vid(v1), vid(v2), 1, 0, 0, len(sidedefs) - 1, -1))
+        if not isinstance(b, int):  # one-sided: plain wall, or a special one
+            special, tex = level.specials[b] if b else (0, level.wall_for(fp))
+            sidedefs.append((0, 0, "-", "-", tex, f))
+            linedefs.append((vid(v1), vid(v2), 1, special, 0, len(sidedefs) - 1, -1))
         else:
             bp = level.sectors[b]
             special = 1 if bp.get("door") else 0  # DR: open, wait, close
@@ -293,7 +303,7 @@ def build_map(name, level, door_texture="DOOR1"):
             sidedefs.append((0, 0, level.wall_for(bp), level.wall_for(bp), "-", b))
             linedefs.append((vid(v1), vid(v2), flags, special, 0, len(sidedefs) - 2, len(sidedefs) - 1))
         segs.append(Seg(v1, v2, i, 0, 0))
-        if b is not None:
+        if isinstance(b, int):
             segs.append(Seg(v2, v1, i, 1, 0))
 
     bsp = Bsp(segs)
