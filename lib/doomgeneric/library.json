@@ -1,0 +1,11 @@
+{
+  "name": "doomgeneric",
+  "version": "0.0.0",
+  "description": "The Doom engine, via ozkl/doomgeneric (commit e257a09), with small terraDial changes marked 'terraDial:'. Only the waveshare-knob-1_8-doom env builds it.",
+  "license": "GPL-2.0-only",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src",
+    "flags": ["-w", "-O2"]
+  }
+}

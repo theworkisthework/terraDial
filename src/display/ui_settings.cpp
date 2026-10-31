@@ -20,6 +20,7 @@
 #include "../net/ota_updater.h"
 #include "../net/demo_mode.h"
 #include "../led/panel_ring.h"
+#include "../launcher/game_launcher.h"
 #include <WiFi.h>
 #include <stdio.h>
 #include <string.h>
@@ -1166,6 +1167,83 @@ else if (WiFi.status() != WL_CONNECTED)
     void openSpiroCb(lv_event_t *) { UiNav::goSpiro(); }
     void openAsteroidsCb(lv_event_t *) { UiNav::goAsteroids(); }
 
+    // ---- Leaving for the game (launcher/game_launcher.h) ----
+    //
+    // The game is a separate firmware: going to it restarts the panel and
+    // takes it off the plotter, so it asks first, and says so.
+    lv_obj_t *gameConfirm = nullptr;
+    lv_obj_t *gameConfirmMsg = nullptr;
+    lv_obj_t *gamePlayBtn = nullptr;
+
+    void closeGameConfirm(lv_event_t *)
+    {
+        if (gameConfirm) lv_obj_add_flag(gameConfirm, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void playGameCb(lv_event_t *)
+    {
+        const char *why = GameLauncher::blockedReason();
+        if (why)
+        {
+            lv_label_set_text(gameConfirmMsg, why);
+            return;
+        }
+        lv_label_set_text(gameConfirmMsg, "Restarting into the game...");
+        lv_refr_now(NULL);
+        if (!GameLauncher::launch()) lv_label_set_text(gameConfirmMsg, "Couldn't start the game.");
+    }
+
+    void buildGameConfirm()
+    {
+        gameConfirm = lv_obj_create(lv_layer_top());
+        lv_obj_remove_style_all(gameConfirm);
+        lv_obj_set_size(gameConfirm, px(240), px(240));
+        lv_obj_center(gameConfirm);
+        lv_obj_set_style_radius(gameConfirm, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(gameConfirm, Palette::bgApp(), 0);
+        lv_obj_set_style_bg_opa(gameConfirm, LV_OPA_COVER, 0);
+        lv_obj_add_flag(gameConfirm, LV_OBJ_FLAG_CLICKABLE); // swallow taps meant for what's behind
+        lv_obj_clear_flag(gameConfirm, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(gameConfirm, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(gameConfirm, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_row(gameConfirm, px(8), 0);
+        lv_obj_set_style_pad_hor(gameConfirm, px(34), 0);
+
+        lv_obj_t *title = lv_label_create(gameConfirm);
+        lv_label_set_text(title, "Leave terraDial?");
+        lv_obj_set_style_text_font(title, &UI_FONT_14, 0);
+        lv_obj_set_style_text_color(title, Palette::text(), 0);
+
+        gameConfirmMsg = lv_label_create(gameConfirm);
+        lv_label_set_long_mode(gameConfirmMsg, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(gameConfirmMsg, lv_pct(100));
+        lv_obj_set_style_text_align(gameConfirmMsg, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_font(gameConfirmMsg, &UI_FONT_12, 0);
+        lv_obj_set_style_text_color(gameConfirmMsg, Palette::textMuted(), 0);
+
+        lv_obj_t *lbl;
+        gamePlayBtn = uiMakeButton(gameConfirm, "Play", &lbl);
+        lv_obj_set_width(gamePlayBtn, px(120));
+        lv_obj_add_event_cb(gamePlayBtn, playGameCb, LV_EVENT_CLICKED, NULL);
+        lv_obj_t *cancel = uiMakeButton(gameConfirm, "Stay", &lbl);
+        lv_obj_set_width(cancel, px(120));
+        lv_obj_set_style_bg_color(cancel, Palette::bgSecondary(), 0);
+        lv_obj_set_style_text_color(lbl, Palette::text(), 0);
+        lv_obj_add_event_cb(cancel, closeGameConfirm, LV_EVENT_CLICKED, NULL);
+    }
+
+    void openGameConfirmCb(lv_event_t *)
+    {
+        if (!gameConfirm) buildGameConfirm();
+        const char *why = GameLauncher::blockedReason();
+        lv_label_set_text(gameConfirmMsg,
+                          why ? why
+                              : "Machine control stops while you play: the dial restarts into terraDoom and "
+                                "disconnects from the plotter. Hold the top of the screen to come back.");
+        lv_obj_clear_flag(gameConfirm, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(gameConfirm);
+    }
+
     void addSpiroControls(lv_obj_t *card)
     {
         lv_obj_t *row = uiMakeRow(card, "Spirograph in Jobs");
@@ -1189,6 +1267,13 @@ else if (WiFi.status() != WL_CONNECTED)
 
         lv_obj_t *gameBtn = uiMakeButton(card, "Asteroids", nullptr);
         lv_obj_add_event_cb(gameBtn, openAsteroidsCb, LV_EVENT_CLICKED, NULL);
+
+        // The bigger game: a separate firmware, if this dial has it.
+        if (GameLauncher::installed())
+        {
+            lv_obj_t *playBtn = uiMakeButton(card, "Play terraDoom", nullptr);
+            lv_obj_add_event_cb(playBtn, openGameConfirmCb, LV_EVENT_CLICKED, NULL);
+        }
     }
 
     // Demo mode (net/demo_mode.h): a simulated plotter and lights, so the
