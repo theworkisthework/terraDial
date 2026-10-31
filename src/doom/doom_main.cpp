@@ -9,13 +9,15 @@
 //
 // Controls, with no buttons on the Knob:
 //   knob                  turn left / right
-//   touch, top            forward
-//   touch, bottom         back
-//   touch, centre         fire
-//   touch, left or right  use (doors, switches)
+//   left edge, slide      a thumb slider: slide up to go forward, down to go
+//                         back -- a little to walk, further to run
+//   touch, anywhere else  fire
+//   right edge            use (switches; doors open as you walk into them)
+// The touch panel senses one finger at a time, so it's move OR fire.
 //
 // The game fills the whole circle; health, armour, ink (ammo), kills and
-// the level sit in little circles round the rim, over the top of it.
+// the level sit in little circles round the rim, and the movement slider
+// down the left edge, over the top of it.
 #include <Arduino.h>
 #include "pins.h"
 #include "display/lgfx_config.h"
@@ -165,20 +167,54 @@ static void drawSlot(LGFX_Sprite &b, int bandY, const HudSlot &s, int value)
     b.drawString(s.label, cx, cy + 10);
 }
 
-// Faint hints for the forward/back zones.
-static void drawChevron(LGFX_Sprite &b, int tipY, int dir)
+// The movement slider down the left edge: a track, and a thumb that
+// follows how far the finger has slid. Lives in its own overlay strip
+// (side), between the two bands.
+static const int SIDE_W = 60;
+static const int SIDE_Y = BAND_H, SIDE_H = VIEW - 2 * BAND_H;
+static LGFX_Sprite side(&gfx);
+static const int TRACK_X = 38, TRACK_HALF = 66; // centre column; half-length
+static const int SLIDE_WALK = 10, SLIDE_RUN = 45; // pixels of slide
+// Set by the input code (same task): whether a finger is on the slider,
+// and how far it has slid from where it landed (up is negative).
+static bool sliderActive = false;
+static int sliderDy = 0;
+static int sliderDrawnDy = INT32_MIN;
+static bool sliderDrawnActive = false;
+
+static void drawSlider()
 {
-    const int cx = VIEW / 2;
-    for (int i = 0; i < 2; i++)
+    int cy = VIEW / 2 - SIDE_Y;
+    side.fillScreen(C_KEY);
+    side.drawRoundRect(TRACK_X - 7, cy - TRACK_HALF - 7, 15, 2 * TRACK_HALF + 15, 7, C_GREY);
+    // Run marks: past these the slider runs.
+    side.drawFastHLine(TRACK_X - 4, cy - SLIDE_RUN, 9, C_GREY);
+    side.drawFastHLine(TRACK_X - 4, cy + SLIDE_RUN, 9, C_GREY);
+    // Up and down arrows at the ends.
+    for (int dir = -1; dir <= 1; dir += 2)
     {
-        b.drawLine(cx - 10, tipY - 8 * dir + i, cx, tipY + i, C_GREY);
-        b.drawLine(cx, tipY + i, cx + 10, tipY - 8 * dir + i, C_GREY);
+        int tip = cy + dir * (TRACK_HALF + 16);
+        side.fillTriangle(TRACK_X, tip, TRACK_X - 6, tip - dir * 7, TRACK_X + 6, tip - dir * 7, C_GREY);
     }
+    int d = sliderDy < -TRACK_HALF ? -TRACK_HALF : sliderDy > TRACK_HALF ? TRACK_HALF : sliderDy;
+    if (sliderActive)
+    {
+        uint16_t c = abs(sliderDy) >= SLIDE_RUN ? C_CORAL : C_LIME;
+        side.fillCircle(TRACK_X, cy + d, 9, c);
+    }
+    else
+    {
+        side.drawCircle(TRACK_X, cy, 9, C_GREY);
+    }
+    sliderDrawnDy = sliderDy;
+    sliderDrawnActive = sliderActive;
 }
 
 // Redraws whichever band has a number that changed.
 static void updateHud()
 {
+    if (sliderActive != sliderDrawnActive || (sliderActive && sliderDy / 2 != sliderDrawnDy / 2))
+        drawSlider();
     if (gamestate != GS_LEVEL) return;
     const player_t &p = players[consoleplayer];
     int ammoType = weaponinfo[p.readyweapon].ammo;
@@ -199,8 +235,6 @@ static void updateHud()
         LGFX_Sprite &b = band[which];
         int bandY = which == 0 ? 0 : VIEW - BAND_H;
         b.fillScreen(C_KEY);
-        if (which == 0) drawChevron(b, 52, -1);
-        else drawChevron(b, VIEW - 52 - bandY, 1);
         for (int i = 0; i < H_COUNT; i++)
         {
             if ((i >= H_KILL) != (which == 0)) continue;
@@ -222,6 +256,10 @@ extern "C" void DG_Init()
         b.fillScreen(C_KEY);
     }
     bandKey = ((const uint16_t *)band[0].getBuffer())[0]; // C_KEY as the band stores it
+    side.setColorDepth(16);
+    side.setPsram(true);
+    side.createSprite(SIDE_W, SIDE_H);
+    drawSlider();
 }
 
 extern "C" void DG_DrawFrame()
@@ -235,6 +273,7 @@ extern "C" void DG_DrawFrame()
     const uint8_t *src = (const uint8_t *)DG_ScreenBuffer;
     const uint16_t *top = (const uint16_t *)band[0].getBuffer();
     const uint16_t *bot = (const uint16_t *)band[1].getBuffer();
+    const uint16_t *sid = (const uint16_t *)side.getBuffer();
     gfx.startWrite();
     int which = 0;
     for (int row = 0; row < VIEW; row += CHUNK_ROWS)
@@ -247,10 +286,15 @@ extern "C" void DG_DrawFrame()
             const uint16_t *over = y < BAND_H ? top + y * VIEW
                                  : y >= VIEW - BAND_H ? bot + (y - (VIEW - BAND_H)) * VIEW
                                  : nullptr;
-            if (!over)
-                for (int x = 0; x < VIEW; x++) *out++ = lut[line[srcX[x]]];
-            else
+            if (over)
                 for (int x = 0; x < VIEW; x++) *out++ = over[x] != bandKey ? over[x] : lut[line[srcX[x]]];
+            else
+            {
+                const uint16_t *sl = sid + (y - SIDE_Y) * SIDE_W;
+                int x = 0;
+                for (; x < SIDE_W; x++) *out++ = sl[x] != bandKey ? sl[x] : lut[line[srcX[x]]];
+                for (; x < VIEW; x++) *out++ = lut[line[srcX[x]]];
+            }
         }
         gfx.waitDMA(); // the previous strip is out; the window can move on
         gfx.pushImageDMA(0, row, VIEW, CHUNK_ROWS, (const lgfx::swap565_t *)strip[which]);
@@ -296,15 +340,27 @@ static const uint32_t TURN_MS = 100;
 static uint8_t turnKey = 0;
 static uint32_t turnUntil = 0;
 
-// The key a touch at (x, y) holds down, or 0.
-static uint8_t zoneKey(int x, int y)
+// "Run" is wanted by the knob (fast turns) and by the slider (pushed far):
+// held while either wants it.
+static bool runHeld = false;
+static void setRun(bool want)
 {
-    int dx = x - PANEL_RES / 2, dy = y - PANEL_RES / 2;
-    const int centreR = PANEL_RES / 5;
-    if (dx * dx + dy * dy < centreR * centreR) return KEY_FIRE;
-    if (abs(dy) >= abs(dx)) return dy < 0 ? KEY_UPARROW : KEY_DOWNARROW;
-    return KEY_USE;
+    if (want == runHeld) return;
+    pushKey(want, KEY_RSHIFT);
+    runHeld = want;
 }
+
+// Holds one key from a set, releasing the last.
+static void hold(uint8_t &held, uint8_t want)
+{
+    if (want == held) return;
+    if (held) pushKey(false, held);
+    if (want) pushKey(true, want);
+    held = want;
+}
+
+static const int SLIDER_ZONE = 110; // a touch landing left of this is the slider
+static const int USE_ZONE = PANEL_RES - 60; // right of this is use
 
 // Called every tick, from the game's own task.
 static void pollInput()
@@ -316,31 +372,51 @@ static void pollInput()
     if (d != 0)
     {
         uint8_t k = d > 0 ? KEY_RIGHTARROW : KEY_LEFTARROW;
-        if (turnKey && turnKey != k) pushKey(false, turnKey);
-        if (!turnKey) pushKey(true, KEY_RSHIFT);
-        if (turnKey != k) pushKey(true, k);
-        turnKey = k;
+        hold(turnKey, k);
         // Several detents at once turn for longer, not faster.
         turnUntil = now + TURN_MS * (uint32_t)abs(d);
     }
-    if (turnKey && (int32_t)(now - turnUntil) >= 0)
-    {
-        pushKey(false, turnKey);
-        pushKey(false, KEY_RSHIFT);
-        turnKey = 0;
-    }
+    if (turnKey && (int32_t)(now - turnUntil) >= 0) hold(turnKey, 0);
 
-    // Touch: hold a zone's key while the finger is in it.
-    static uint8_t heldKey = 0;
+    // Touch. What a press does is decided where it lands, and kept until
+    // the finger lifts: a slide that strays right is still a slide.
+    enum Mode { NONE, SLIDE, FIRE, USE };
+    static Mode mode = NONE;
+    static int originY = 0;
+    static uint8_t moveKey = 0, actionKey = 0;
+    bool slideRun = false;
+
     uint16_t x, y;
     uint8_t gesture;
-    uint8_t want = touch.getTouch(&x, &y, &gesture) ? zoneKey(x, y) : 0;
-    if (want != heldKey)
+    if (touch.getTouch(&x, &y, &gesture))
     {
-        if (heldKey) pushKey(false, heldKey);
-        if (want) pushKey(true, want);
-        heldKey = want;
+        if (mode == NONE)
+        {
+            mode = x < SLIDER_ZONE ? SLIDE : x > USE_ZONE ? USE : FIRE;
+            originY = y;
+        }
+        if (mode == SLIDE)
+        {
+            int dy = (int)y - originY;
+            sliderActive = true;
+            sliderDy = dy;
+            hold(moveKey, dy <= -SLIDE_WALK ? KEY_UPARROW : dy >= SLIDE_WALK ? KEY_DOWNARROW : 0);
+            slideRun = abs(dy) >= SLIDE_RUN;
+        }
+        else
+        {
+            hold(actionKey, mode == FIRE ? KEY_FIRE : KEY_USE);
+        }
     }
+    else if (mode != NONE)
+    {
+        mode = NONE;
+        sliderActive = false;
+        sliderDy = 0;
+        hold(moveKey, 0);
+        hold(actionKey, 0);
+    }
+    setRun(turnKey != 0 || slideRun);
 }
 
 // ---------------------------------------------------------------- the game
