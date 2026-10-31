@@ -261,7 +261,13 @@ void P_PlayerThink (player_t* player)
 	player->mo->reactiontime--;
     else
 	P_MovePlayer (player);
-    
+
+    // terraDial: the Knob has no handy use button, so walking forward
+    // presses use for you every few tics -- doors open as you walk into
+    // them. (Tapping the side of the screen still works too.)
+    if (cmd->forwardmove > 0 && !(leveltime & 7))
+	P_UseLines (player);
+
     P_CalcHeight (player);
 
     if (player->mo->subsector->sector->special)

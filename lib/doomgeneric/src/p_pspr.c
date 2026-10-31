@@ -667,7 +667,17 @@ A_FirePistol
 		  weaponinfo[player->readyweapon].flashstate);
 
     P_BulletSlope (player->mo);
-    P_GunShot (player->mo, !player->refire);
+    // terraDial: the pen sprays a small fan of ink -- three streaks,
+    // 4.5 degrees apart -- so near misses still land on a small screen.
+    {
+        int i;
+        for (i = -1; i <= 1; i++)
+        {
+            int damage = 5*(P_Random ()%3+1);
+            P_LineAttack (player->mo, player->mo->angle + i * (ANG90/20),
+                          MISSILERANGE, bulletslope, damage);
+        }
+    }
 }
 
 

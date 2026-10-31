@@ -285,7 +285,9 @@ def build_map(name, level, door_texture="DOOR1"):
         else:
             bp = level.sectors[b]
             special = 1 if bp.get("door") else 0  # DR: open, wait, close
-            flags = 4 | (8 if special else 0)  # two-sided; doors unpegged on top
+            # Two-sided, and pegged: a door's texture hangs from the door's
+            # bottom edge, so it slides up with it.
+            flags = 4
             upper_f = door_texture if bp.get("door") else level.wall_for(fp)
             sidedefs.append((0, 0, upper_f, level.wall_for(fp), "-", f))
             sidedefs.append((0, 0, level.wall_for(bp), level.wall_for(bp), "-", b))

@@ -281,14 +281,31 @@ def step_edges():
 
 
 def door_panel():
-    """A door: a lime panel plotted with nested rounded rectangles."""
-    cv = Canvas(64, 128, idx("lime", 18))
-    for k in range(0, 26, 4):
-        x0, y0, x1, y1 = 4 + k, 6 + k, 59 - k, 121 - k
-        if x1 - x0 < 6:
-            break
-        cv.outline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], idx("coral", 20))
-    cv.circle(50, 64, 3, idx("grey", 2), fill=idx("grey", 2))
+    """A door in a wall: a strip of hatched lintel on top, then a panel of
+    graph paper. 128 tall -- the engine's column
+    drawer wraps textures at 128, so the door is exactly that, and rooms
+    with doors are 128 high (corridors 112) to show it whole. The texture
+    hangs from the door's bottom edge, so opening slides the whole picture
+    up into the ceiling."""
+    cv = Canvas(64, 128, idx("grey", 3))
+    hatch(cv, 45, 9, idx("lime", 20), wobble=0.4, seed=10)   # the lintel, as WALL1
+    # The door itself: a sheet of graph paper -- fine teal squares, a
+    # heavier line every fourth, and a coral margin rule down the left.
+    LINTEL = 24
+    for y in range(LINTEL, 128):
+        for x in range(64):
+            gy = y - LINTEL
+            if x % 16 == 0 or gy % 16 == 0:
+                c = idx("teal", 16)
+            elif x % 4 == 0 or gy % 4 == 0:
+                c = idx("teal", 26)
+            else:
+                c = idx("paper", 26)
+            cv.px[y][x] = c
+    cv.line(10, LINTEL, 10, 127, idx("coral", 20), 1)
+    cv.line(0, LINTEL, 63, LINTEL, idx("grey", 2), 2)
+    cv.outline([(0, LINTEL), (63, LINTEL), (63, 127), (0, 127)], idx("grey", 6))
+    cv.circle(52, 82, 3, idx("grey", 2), fill=idx("coral", 20))
     return cv
 
 
@@ -544,6 +561,10 @@ def level01():
     carve(4, 9, 4, 10, ":")     # corridor from the start room down to it
     for c, r in ((9, 4), (14, 4), (20, 11), (15, 15), (9, 15), (4, 8), (4, 11)):
         put(c, r, "D")
+    # Porches: a low-ceilinged cell in front of each courtyard door, so the
+    # door sits under a lintel rather than in the courtyard's tall wall.
+    put(15, 4, "p")
+    put(20, 10, "p")
 
     put(3, 4, "P")
     put(11, 4, "i")
@@ -554,11 +575,13 @@ def level01():
     rows = ["".join(r) for r in g]
     check_doors(rows)
 
-    room = dict(floor=0, ceil=160, floorpic="TDFLOOR", ceilpic="TDCEIL", light=224, wall="WALL1")
+    # 128 high, to match the door texture (see door_panel).
+    room = dict(floor=0, ceil=128, floorpic="TDFLOOR", ceilpic="TDCEIL", light=224, wall="WALL1")
     terrain = {
         ".": room,
-        ":": dict(room, ceil=128, light=176, wall="WALL2"),
+        ":": dict(room, ceil=112, light=176, wall="WALL2"),
         ",": dict(floor=0, ceil=288, floorpic="TDPAPER", ceilpic="F_SKY1", light=255, wall="WALL3"),
+        "p": dict(floor=0, ceil=128, floorpic="TDPAPER", ceilpic="TDCEIL", light=240, wall="WALL3"),
         "1": dict(room, floor=16, floorpic="TDSTEPF", wall="STEP"),
         "2": dict(room, floor=32, floorpic="TDSTEPF", wall="STEP"),
         "3": dict(room, floor=48, floorpic="TDSTEPF", wall="STEP"),

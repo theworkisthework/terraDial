@@ -1411,10 +1411,10 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	S_TROO_RAISE1		// raisestate
     },
 
-    {		// MT_SERGEANT
+    {		// MT_SERGEANT -- terraDial's Blot
 	3002,		// doomednum
 	S_SARG_STND,		// spawnstate
-	150,		// spawnhealth
+	60,		// spawnhealth (terraDial: was 150, too much for a pen)
 	S_SARG_RUN1,		// seestate
 	sfx_sgtsit,		// seesound
 	8,		// reactiontime
