@@ -25,7 +25,14 @@
 // Screen width and height.
 
 #define SCREENWIDTH  320
+// terraDial: the port may ask for a taller frame (DOOMGENERIC_RESY) to fill a
+// round panel; Doom's vertical view is tied to the width, so a taller frame
+// just shows more above and below.
+#ifdef DOOMGENERIC_RESY
+#define SCREENHEIGHT DOOMGENERIC_RESY
+#else
 #define SCREENHEIGHT 200
+#endif
 
 // Screen width used for "squash" scale functions
 

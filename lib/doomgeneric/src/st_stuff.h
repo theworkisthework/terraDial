@@ -29,7 +29,9 @@
 // Now sensitive for scaling.
 #define ST_HEIGHT	32
 #define ST_WIDTH	SCREENWIDTH
-#define ST_Y		(SCREENHEIGHT - ST_HEIGHT)
+// terraDial: the widget positions are laid out for a 200-row screen, so the
+// bar stays where they expect it even when the frame is taller.
+#define ST_Y		(200 - ST_HEIGHT)
 
 
 //

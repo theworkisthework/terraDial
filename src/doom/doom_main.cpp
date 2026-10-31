@@ -14,8 +14,8 @@
 //   touch, centre         fire
 //   touch, left or right  use (doors, switches)
 //
-// The game fills a band across the middle of the circle; health, armour,
-// ink (ammo), kills and the level sit in little circles round the rim.
+// The game fills the whole circle; health, armour, ink (ammo), kills and
+// the level sit in little circles round the rim, over the top of it.
 #include <Arduino.h>
 #include "pins.h"
 #include "display/lgfx_config.h"
@@ -81,17 +81,17 @@ extern "C" unsigned int DG_FileExists(char *filename) { return strcmp(filename, 
 
 // ---------------------------------------------------------------- video
 //
-// Doom's own status bar is off (screenblocks 11), so the 3D view fills the
-// whole 320x200 frame. It's scaled to the panel's full 360px width as a
-// band through the middle of the circle, 224 rows tall. Above and below
-// it, where the panel is too narrow to be worth drawing the game, are the
-// forward/back touch zones and the HUD: little circles round the rim, like
-// the dial's menu ring.
+// Doom's own status bar is off (screenblocks 11) and the engine renders a
+// 320x254 frame -- taller than Doom's 200, so it shows more above and
+// below, and 254 rows stays inside the byte-sized plane tables. That's
+// scaled to fill the whole 360x360 panel, about Doom's own pixel shape.
+// The HUD -- little circles round the rim, like the dial's menu ring --
+// is drawn into two off-screen bands, top and bottom, and laid over the
+// game as each strip is built, so it never flickers.
 
 static const int GAME_W = DOOMGENERIC_RESX, GAME_H = DOOMGENERIC_RESY;
-static const int VIEW_W = PANEL_RES, VIEW_H = 224; // even, for BOARD_PANEL_EVEN_WINDOWS
-static const int VIEW_Y = (PANEL_RES - VIEW_H) / 2;
-static const int CHUNK_ROWS = 8; // even; 5.8KB of internal RAM per strip
+static const int VIEW = PANEL_RES;
+static const int CHUNK_ROWS = 8; // even, for BOARD_PANEL_EVEN_WINDOWS; 5.8KB of internal RAM per strip
 // Palette index -> RGB565 already in the panel's byte order (swap565), so a
 // strip goes out by DMA exactly as converted, with no copy on the way.
 static uint16_t lut[256];
@@ -100,8 +100,8 @@ static uint16_t lut[256];
 // the scrambled bands.
 static uint16_t *strip[2] = {nullptr, nullptr};
 // Nearest-neighbour scaling: which source column/row each output one shows.
-static uint16_t srcX[VIEW_W];
-static uint8_t srcY[VIEW_H];
+static uint16_t srcX[VIEW];
+static uint8_t srcY[VIEW];
 
 static void rebuildLut()
 {
@@ -112,18 +112,17 @@ static void rebuildLut()
     }
 }
 
-extern "C" void DG_Init()
-{
-    for (int x = 0; x < VIEW_W; x++) srcX[x] = x * GAME_W / VIEW_W;
-    for (int y = 0; y < VIEW_H; y++) srcY[y] = y * GAME_H / VIEW_H;
-}
-
 // ---------------------------------------------------------------- HUD
 //
-// terraPen colours, as the dial's skin: health coral, armour teal, ink
-// (ammo) lime along the bottom; kills and the level along the top. Each
-// circle is redrawn only when its number changes.
+// terraPen colours, as the dial's skin: ink (ammo) lime, health coral,
+// armour teal along the bottom; kills and the level along the top. A band
+// is redrawn only when one of its numbers changes.
 
+static const int BAND_H = 72;
+static LGFX_Sprite band[2] = {LGFX_Sprite(&gfx), LGFX_Sprite(&gfx)}; // top, bottom
+static uint16_t bandKey = 0; // a band pixel equal to this lets the game through
+
+static const uint16_t C_KEY = 0xF81F; // magenta: "not HUD"
 static const uint16_t C_BG = 0x0000;
 static const uint16_t C_LIME = 0xE78B;  // #E5F15C
 static const uint16_t C_CORAL = 0xE9CD; // #E83B68
@@ -139,7 +138,6 @@ struct HudSlot
     const char *label;
     int last;
 };
-// Bottom: ink, health, armour. Top: kills, level.
 static HudSlot hud[] = {
     {120, C_LIME, "INK", INT32_MIN},
     {90, C_CORAL, "HP", INT32_MIN},
@@ -148,49 +146,39 @@ static HudSlot hud[] = {
     {300, C_LIME, "LVL", INT32_MIN},
 };
 enum { H_INK, H_HP, H_ARM, H_KILL, H_LVL, H_COUNT };
-static bool hudNeedsFrame = true;
 
-static void drawSlot(HudSlot &s, int value)
+static void drawSlot(LGFX_Sprite &b, int bandY, const HudSlot &s, int value)
 {
-    int cx = PANEL_RES / 2 + (int)lroundf(RIM_R * cosf(s.angleDeg * (float)M_PI / 180));
-    int cy = PANEL_RES / 2 + (int)lroundf(RIM_R * sinf(s.angleDeg * (float)M_PI / 180));
-    gfx.fillCircle(cx, cy, DOT_R, C_BG);
-    gfx.drawCircle(cx, cy, DOT_R, s.colour);
-    gfx.drawCircle(cx, cy, DOT_R - 1, s.colour);
-    gfx.setTextColor(s.colour, C_BG);
-    gfx.setTextDatum(lgfx::middle_center);
+    int cx = VIEW / 2 + (int)lroundf(RIM_R * cosf(s.angleDeg * (float)M_PI / 180));
+    int cy = VIEW / 2 + (int)lroundf(RIM_R * sinf(s.angleDeg * (float)M_PI / 180)) - bandY;
+    b.fillCircle(cx, cy, DOT_R, C_BG);
+    b.drawCircle(cx, cy, DOT_R, s.colour);
+    b.drawCircle(cx, cy, DOT_R - 1, s.colour);
+    b.setTextColor(s.colour);
+    b.setTextDatum(lgfx::middle_center);
     char buf[8];
     if (value < 0) snprintf(buf, sizeof buf, "--");
     else snprintf(buf, sizeof buf, "%d", value);
-    gfx.setFont(&fonts::Font2);
-    gfx.drawString(buf, cx, cy - 3);
-    gfx.setFont(&fonts::Font0);
-    gfx.drawString(s.label, cx, cy + 10);
+    b.setFont(&fonts::Font2);
+    b.drawString(buf, cx, cy - 3);
+    b.setFont(&fonts::Font0);
+    b.drawString(s.label, cx, cy + 10);
 }
 
-static void drawChevrons()
+// Faint hints for the forward/back zones.
+static void drawChevron(LGFX_Sprite &b, int tipY, int dir)
 {
-    // Faint hints for the forward/back zones.
-    const int cx = PANEL_RES / 2;
+    const int cx = VIEW / 2;
     for (int i = 0; i < 2; i++)
     {
-        gfx.drawLine(cx - 10, 58 + i, cx, 50 + i, C_GREY);
-        gfx.drawLine(cx, 50 + i, cx + 10, 58 + i, C_GREY);
-        gfx.drawLine(cx - 10, 300 + i, cx, 308 + i, C_GREY);
-        gfx.drawLine(cx, 308 + i, cx + 10, 300 + i, C_GREY);
+        b.drawLine(cx - 10, tipY - 8 * dir + i, cx, tipY + i, C_GREY);
+        b.drawLine(cx, tipY + i, cx + 10, tipY - 8 * dir + i, C_GREY);
     }
 }
 
+// Redraws whichever band has a number that changed.
 static void updateHud()
 {
-    if (hudNeedsFrame)
-    {
-        gfx.fillRect(0, 0, PANEL_RES, VIEW_Y, C_BG);
-        gfx.fillRect(0, VIEW_Y + VIEW_H, PANEL_RES, PANEL_RES - VIEW_Y - VIEW_H, C_BG);
-        drawChevrons();
-        for (auto &s : hud) s.last = INT32_MIN;
-        hudNeedsFrame = false;
-    }
     if (gamestate != GS_LEVEL) return;
     const player_t &p = players[consoleplayer];
     int ammoType = weaponinfo[p.readyweapon].ammo;
@@ -201,12 +189,39 @@ static void updateHud()
         p.killcount,
         gamemap,
     };
+    bool dirty[2] = {false, false};
     for (int i = 0; i < H_COUNT; i++)
+        if (values[i] != hud[i].last) dirty[i >= H_KILL ? 0 : 1] = true;
+
+    for (int which = 0; which < 2; which++)
     {
-        if (values[i] == hud[i].last) continue;
-        hud[i].last = values[i];
-        drawSlot(hud[i], values[i]);
+        if (!dirty[which]) continue;
+        LGFX_Sprite &b = band[which];
+        int bandY = which == 0 ? 0 : VIEW - BAND_H;
+        b.fillScreen(C_KEY);
+        if (which == 0) drawChevron(b, 52, -1);
+        else drawChevron(b, VIEW - 52 - bandY, 1);
+        for (int i = 0; i < H_COUNT; i++)
+        {
+            if ((i >= H_KILL) != (which == 0)) continue;
+            hud[i].last = values[i];
+            drawSlot(b, bandY, hud[i], values[i]);
+        }
     }
+}
+
+extern "C" void DG_Init()
+{
+    for (int x = 0; x < VIEW; x++) srcX[x] = x * GAME_W / VIEW;
+    for (int y = 0; y < VIEW; y++) srcY[y] = y * GAME_H / VIEW;
+    for (auto &b : band)
+    {
+        b.setColorDepth(16);
+        b.setPsram(true);
+        b.createSprite(VIEW, BAND_H);
+        b.fillScreen(C_KEY);
+    }
+    bandKey = ((const uint16_t *)band[0].getBuffer())[0]; // C_KEY as the band stores it
 }
 
 extern "C" void DG_DrawFrame()
@@ -216,23 +231,32 @@ extern "C" void DG_DrawFrame()
         rebuildLut();
         palette_changed = false;
     }
+    updateHud();
     const uint8_t *src = (const uint8_t *)DG_ScreenBuffer;
+    const uint16_t *top = (const uint16_t *)band[0].getBuffer();
+    const uint16_t *bot = (const uint16_t *)band[1].getBuffer();
     gfx.startWrite();
     int which = 0;
-    for (int row = 0; row < VIEW_H; row += CHUNK_ROWS)
+    for (int row = 0; row < VIEW; row += CHUNK_ROWS)
     {
         uint16_t *out = strip[which];
         for (int r = 0; r < CHUNK_ROWS; r++)
         {
-            const uint8_t *line = src + srcY[row + r] * GAME_W;
-            for (int x = 0; x < VIEW_W; x++) *out++ = lut[line[srcX[x]]];
+            int y = row + r;
+            const uint8_t *line = src + srcY[y] * GAME_W;
+            const uint16_t *over = y < BAND_H ? top + y * VIEW
+                                 : y >= VIEW - BAND_H ? bot + (y - (VIEW - BAND_H)) * VIEW
+                                 : nullptr;
+            if (!over)
+                for (int x = 0; x < VIEW; x++) *out++ = lut[line[srcX[x]]];
+            else
+                for (int x = 0; x < VIEW; x++) *out++ = over[x] != bandKey ? over[x] : lut[line[srcX[x]]];
         }
         gfx.waitDMA(); // the previous strip is out; the window can move on
-        gfx.pushImageDMA(0, VIEW_Y + row, VIEW_W, CHUNK_ROWS, (const lgfx::swap565_t *)strip[which]);
+        gfx.pushImageDMA(0, row, VIEW, CHUNK_ROWS, (const lgfx::swap565_t *)strip[which]);
         which ^= 1;
     }
     gfx.waitDMA();
-    updateHud();
     gfx.endWrite();
 }
 
@@ -266,8 +290,9 @@ extern "C" int DG_GetKey(int *pressed, unsigned char *key)
     return 1;
 }
 
-// One knob detent holds the turn key this long: about 15 degrees of turn.
-static const uint32_t TURN_MS = 70;
+// One knob detent holds the turn key this long, with "run" held too so it
+// turns at Doom's fast rate: about 25 degrees a detent.
+static const uint32_t TURN_MS = 100;
 static uint8_t turnKey = 0;
 static uint32_t turnUntil = 0;
 
@@ -292,6 +317,7 @@ static void pollInput()
     {
         uint8_t k = d > 0 ? KEY_RIGHTARROW : KEY_LEFTARROW;
         if (turnKey && turnKey != k) pushKey(false, turnKey);
+        if (!turnKey) pushKey(true, KEY_RSHIFT);
         if (turnKey != k) pushKey(true, k);
         turnKey = k;
         // Several detents at once turn for longer, not faster.
@@ -300,6 +326,7 @@ static void pollInput()
     if (turnKey && (int32_t)(now - turnUntil) >= 0)
     {
         pushKey(false, turnKey);
+        pushKey(false, KEY_RSHIFT);
         turnKey = 0;
     }
 
@@ -346,7 +373,7 @@ void setup()
     jogWheel.begin();
 
     for (int i = 0; i < 2; i++)
-        strip[i] = (uint16_t *)heap_caps_malloc(VIEW_W * CHUNK_ROWS * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+        strip[i] = (uint16_t *)heap_caps_malloc(VIEW * CHUNK_ROWS * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
 
     // The renderer recurses down the BSP tree, so the game gets a stack of
     // its own, bigger than loop()'s 8KB. Internal RAM is the limit: the

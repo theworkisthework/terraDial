@@ -215,12 +215,12 @@ void D_Display (void)
 			break;
 		if (automapactive)
 			AM_Drawer ();
-		if (wipe || (viewheight != 200 && fullscreen) )
+		if (wipe || (viewheight != SCREENHEIGHT && fullscreen) ) // terraDial: was 200
 			redrawsbar = true;
 		if (inhelpscreensstate && !inhelpscreens)
 			redrawsbar = true;              // just put away the help screen
-		ST_Drawer (viewheight == 200, redrawsbar );
-		fullscreen = viewheight == 200;
+		ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar ); // terraDial: was 200
+		fullscreen = viewheight == SCREENHEIGHT; // terraDial: was 200
 		break;
 
       case GS_INTERMISSION:

@@ -276,9 +276,18 @@ def sky_flat():
 # ------------------------------------------------------------------ sprites
 #
 # The weapon is a pen, held from the bottom right with the nib at the
-# crosshair. Weapon sprites sit in screen space (full-view terms; the
-# status bar lifts them all by 16): a left offset of -x puts the patch's
-# left edge at screen x + 1, and a top offset of t puts its top at 32 - t.
+# crosshair. Weapon sprites sit in screen space, hung from the middle of the
+# view: a left offset of -x puts the patch's left edge at screen x + 1, and
+# a top offset of t puts its top at CENTERY - 68 - t. The Knob renders a
+# 320x254 frame (src/doom/doom_main.cpp), so the view's middle is row 127.
+
+VIEW_H = 254
+CENTERY = VIEW_H // 2
+
+
+def top_offset(screen_y):
+    """The top offset that puts a weapon patch's top row at screen_y."""
+    return CENTERY - 68 - screen_y
 
 def pen(cv, tip_x, tip_y, ink=False):
     body = idx("coral", 22)
@@ -311,12 +320,12 @@ def pen(cv, tip_x, tip_y, ink=False):
 
 
 def weapon_patch(dx=0, dy=0, ink=False):
-    w, h = 150, 110
+    w, h = 150, 170            # tall enough to run off the bottom of the view
     cv = Canvas(w, h)
     pen(cv, 18 + dx, 14 + dy, ink)
-    left_x = 160 - 18          # tip lands on the centre column
-    bottom = 200               # runs off the bottom of the view
-    return patch(cv, -left_x, 32 - (bottom - h))
+    left_x = 160 - 18          # tip lands on the centre column...
+    top = CENTERY - 14         # ...and the middle row
+    return patch(cv, -left_x, top_offset(top))
 
 
 def flash_patch():
@@ -327,8 +336,8 @@ def flash_patch():
         a, r = rnd.uniform(0, 6.3), rnd.uniform(11, 17)
         cv.circle(20 + r * math.cos(a), 20 + r * math.sin(a), rnd.uniform(1, 2.5),
                   idx("ink", 16), fill=idx("ink", 22))
-    # Centred on the nib: screen (161, 104) in full-view terms.
-    return patch(cv, -(161 - 20 - 1), 32 - (104 - 20))
+    # Centred on the nib, at the middle of the view.
+    return patch(cv, -(161 - 20 - 1), top_offset(CENTERY - 20))
 
 
 def blot(r, hue, seed, fade=0):
