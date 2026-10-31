@@ -58,6 +58,8 @@
 #include <CoreFoundation/CFUserNotification.h>
 #endif
 
+// terraDial: was 6 and 6 -- the zone lives in the Knob's 8MB PSRAM
+// beside the frame buffers, and a small WAD needs far less.
 #define DEFAULT_RAM 5 /* MiB */
 #define MIN_RAM     3  /* MiB */
 

@@ -482,6 +482,11 @@ Some notes worth knowing before changing things:
 MIT — see [LICENSE](LICENSE). Same licence as its parent project
 [terraForge](https://github.com/theworkisthework/terraForge).
 
+On the `doom` branch the repository is mixed-licence: `lib/doomgeneric/` is
+GPL-2.0-or-later, and the game firmware that links it (env
+`waveshare-knob-1_8-doom`) is GPL-3.0. Everything else, the terraDial
+firmware included, stays MIT. See [GAME_NOTICES.md](GAME_NOTICES.md).
+
 ### Third-party
 
 The firmware image also contains third-party libraries, fonts and icons —
