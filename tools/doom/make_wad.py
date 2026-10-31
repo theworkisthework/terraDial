@@ -259,6 +259,62 @@ def ceil_contours():
     return cv
 
 
+
+def wall_contours():
+    """Outdoors: lime contour lines on deep shell green, like a plotted map."""
+    cv = Canvas(128, 128, idx("green", 6))
+    for y in range(128):
+        for x in range(128):
+            v = (math.sin(x * 2 * math.pi / 128 * 2) * 0.6 + math.cos(y * 2 * math.pi / 128) +
+                 0.4 * math.sin((x - y) * 2 * math.pi / 128 * 3))
+            if abs((v * 2.5) % 1.0 - 0.5) < 0.07:
+                cv.put(x, y, idx("lime", 20))
+    return cv
+
+
+def step_edges():
+    """Riser of a step: coral rules, close together."""
+    cv = Canvas(64, 64, idx("grey", 3))
+    for i, y in enumerate(range(1, 64, 4)):
+        cv.line(0, y, 63, y, idx("coral", 20), wrap=True, wobble=0.4, seed=300 + i)
+    return cv
+
+
+def door_panel():
+    """A door: a lime panel plotted with nested rounded rectangles."""
+    cv = Canvas(64, 128, idx("lime", 18))
+    for k in range(0, 26, 4):
+        x0, y0, x1, y1 = 4 + k, 6 + k, 59 - k, 121 - k
+        if x1 - x0 < 6:
+            break
+        cv.outline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], idx("coral", 20))
+    cv.circle(50, 64, 3, idx("grey", 2), fill=idx("grey", 2))
+    return cv
+
+
+def door_track():
+    cv = Canvas(16, 128, idx("grey", 5))
+    for x in (3, 8, 12):
+        cv.line(x, 0, x, 127, idx("grey", 16), wobble=0.3, seed=x)
+    return cv
+
+
+def paper_dots():
+    """Outdoor ground: a dot grid, as graph paper."""
+    cv = Canvas(64, 64, idx("green", 5))
+    for y in range(0, 64, 8):
+        for x in range(0, 64, 8):
+            cv.put(x + 4, y + 4, idx("lime", 18))
+    cv.line(0, 0, 63, 0, idx("lime", 10), wrap=True)
+    cv.line(0, 0, 0, 63, idx("lime", 10), wrap=True)
+    return cv
+
+
+def step_top():
+    cv = Canvas(64, 64, idx("grey", 3))
+    hatch(cv, 45, 8, idx("lime", 16), wobble=0.3, seed=310)
+    return cv
+
 def sky():
     """Lime paper with a coral horizon, hatched in bands."""
     cv = Canvas(256, 128, idx("lime", 22))
@@ -456,14 +512,94 @@ def make_blockmap(verts, lines, block=128):
     return b"".join(out + body)
 
 
+
+# ------------------------------------------------------------------ MAP01
+
+def level01():
+    """MAP01, "First Sketch": a start room, a corridor out to an open-air
+    courtyard, a hall with a stepped dais to the south, and a side room
+    that loops back to the start. Carved into a grid of solid wall."""
+    import mapbuild
+
+    W, H = 30, 21
+    g = [["#"] * W for _ in range(H)]
+
+    def carve(c0, r0, c1, r1, ch):
+        for r in range(r0, r1 + 1):
+            for c in range(c0, c1 + 1):
+                g[r][c] = ch
+
+    def put(c, r, ch):
+        g[r][c] = ch
+
+    carve(1, 1, 8, 7, ".")      # start room
+    carve(10, 4, 13, 4, ":")    # corridor east
+    carve(15, 1, 27, 10, ",")   # courtyard, open to the sky
+    carve(16, 12, 25, 18, ".")  # hall
+    carve(18, 14, 18, 16, "1")  # steps up to the dais
+    carve(19, 14, 19, 16, "2")
+    carve(20, 14, 22, 16, "3")
+    carve(10, 15, 14, 15, ":")  # corridor west from the hall
+    carve(1, 12, 8, 18, ".")    # side room
+    carve(4, 9, 4, 10, ":")     # corridor from the start room down to it
+    for c, r in ((9, 4), (14, 4), (20, 11), (15, 15), (9, 15), (4, 8), (4, 11)):
+        put(c, r, "D")
+
+    put(3, 4, "P")
+    put(11, 4, "i")
+    for c, r, ch in ((18, 3, "S"), (24, 7, "S"), (21, 6, "B"), (16, 9, "i"), (26, 2, "h"),
+                     (17, 13, "S"), (24, 17, "B"), (21, 15, "a"),
+                     (4, 14, "B"), (6, 17, "B"), (2, 17, "h"), (7, 13, "i")):
+        put(c, r, ch)
+    rows = ["".join(r) for r in g]
+    check_doors(rows)
+
+    room = dict(floor=0, ceil=160, floorpic="TDFLOOR", ceilpic="TDCEIL", light=224, wall="WALL1")
+    terrain = {
+        ".": room,
+        ":": dict(room, ceil=128, light=176, wall="WALL2"),
+        ",": dict(floor=0, ceil=288, floorpic="TDPAPER", ceilpic="F_SKY1", light=255, wall="WALL3"),
+        "1": dict(room, floor=16, floorpic="TDSTEPF", wall="STEP"),
+        "2": dict(room, floor=32, floorpic="TDSTEPF", wall="STEP"),
+        "3": dict(room, floor=48, floorpic="TDSTEPF", wall="STEP"),
+        "D": dict(floor=0, ceil=0, floorpic="TDFLOOR", ceilpic="TDCEIL", light=192, wall="TRACK", door=True),
+        "#": None,
+    }
+    things = {
+        "P": (1, ".", 0),      # you, facing east
+        "S": (3004, "."),      # Scribble
+        "B": (3002, "."),      # Blot
+        "i": (2007, "."),      # ink bottle
+        "h": (2011, "."),      # spare nib
+        "a": (2018, "."),      # sheet of card
+    }
+    level = mapbuild.Level(rows, terrain, things, lambda p: p["wall"])
+    return mapbuild.build_map("MAP01", level)
+
+
+def check_doors(rows):
+    """Every door must sit in a one-cell gap: open on two opposite sides,
+    wall on the other two."""
+    solid = lambda c, r: rows[r][c] == "#"
+    for r, row in enumerate(rows):
+        for c, ch in enumerate(row):
+            if ch != "D":
+                continue
+            ew = not solid(c - 1, r) and not solid(c + 1, r) and solid(c, r - 1) and solid(c, r + 1)
+            ns = not solid(c, r - 1) and not solid(c, r + 1) and solid(c - 1, r) and solid(c + 1, r)
+            assert ew or ns, "door at col %d row %d isn't in a one-cell gap" % (c, r)
+
 # ------------------------------------------------------------------ assembly
 
 def texture_lumps(textures):
     """PNAMES + TEXTURE1 for single-patch textures: [(name, patchname, w, h)]."""
-    pnames = [t[1] for t in textures]
+    pnames = []
+    for t in textures:
+        if t[1] not in pnames:
+            pnames.append(t[1])
     pn = struct.pack("<i", len(pnames)) + b"".join(name8(p) for p in pnames)
-    entries = [name8(n) + struct.pack("<ihhihhhhhh", 0, w, h, 0, 1, 0, 0, i, 1, 0)
-               for i, (n, _, w, h) in enumerate(textures)]
+    entries = [name8(n) + struct.pack("<ihhihhhhhh", 0, w, h, 0, 1, 0, 0, pnames.index(pn_), 1, 0)
+               for n, pn_, w, h in textures]
     head = 4 + 4 * len(entries)
     offs, pos = [], head
     for e in entries:
@@ -488,9 +624,11 @@ def build():
     # the list starts with a placeholder.
     pn, t1 = texture_lumps([("TDNULL", "TDWALL1", 128, 128),
                             ("WALL1", "TDWALL1", 128, 128), ("WALL2", "TDWALL2", 128, 128),
+                            ("WALL3", "TDWALL3", 128, 128), ("STEP", "TDSTEP", 64, 64),
+                            ("DOOR1", "TDDOOR", 64, 128), ("TRACK", "TDTRACK", 16, 128),
                             ("SKY1", "TDSKY", 256, 128)])
     lumps += [("PNAMES", pn), ("TEXTURE1", t1)]
-    lumps += octagon_room()
+    lumps += level01()
 
     lumps.append(("S_START", b""))
     lumps += [("PISGA0", weapon_patch()), ("PISGB0", weapon_patch(-6, -8, ink=True)),
@@ -501,11 +639,16 @@ def build():
         lumps.append(("PUFF%s0" % f, blot(2 + i, "ink", 20 + i, fade=i * 3)))
     for i, f in enumerate("ABC"):
         lumps.append(("BLUD%s0" % f, blot(2 + i, "coral", 30 + i)))
+    import creatures
+    lumps += creatures.sprite_lumps()
     lumps.append(("S_END", b""))
 
     lumps += [("P_START", b""), ("TDWALL1", patch(wall_hatch())), ("TDWALL2", patch(wall_stipple())),
+              ("TDWALL3", patch(wall_contours())), ("TDSTEP", patch(step_edges())),
+              ("TDDOOR", patch(door_panel())), ("TDTRACK", patch(door_track())),
               ("TDSKY", patch(sky())), ("P_END", b"")]
     lumps += [("F_START", b""), ("TDFLOOR", flat(floor_rings())), ("TDCEIL", flat(ceil_contours())),
+              ("TDPAPER", flat(paper_dots())), ("TDSTEPF", flat(step_top())),
               ("F_SKY1", flat(sky_flat())), ("F_END", b"")]
     return lumps
 
