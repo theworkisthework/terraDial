@@ -13,6 +13,7 @@
 //                         back -- a little to walk, further to run
 //   touch, anywhere else  fire
 //   right edge            use (switches; doors open as you walk into them)
+//   hold the top, 2s      back to terraDial
 // The touch panel senses one finger at a time, so it's move OR fire.
 //
 // The game fills the whole circle; health, armour, ink (ammo), kills and
@@ -25,6 +26,8 @@
 #include "input/haptics.h"
 #include <CST816D.h>
 #include <esp_heap_caps.h>
+#include <esp_ota_ops.h>
+#include <Preferences.h>
 #include <climits>
 
 // Arduino's C++ has its own `boolean` (bool); Doom's is an unsigned int.
@@ -211,6 +214,11 @@ static void drawSlider()
 }
 
 // Redraws whichever band has a number that changed.
+// Holding the top of the screen goes back to terraDial; set by the input
+// code, shown in the top band.
+static bool exitHolding = false;
+static bool exitDrawn = false;
+
 static void updateHud()
 {
     if (sliderActive != sliderDrawnActive || (sliderActive && sliderDy / 2 != sliderDrawnDy / 2))
@@ -225,7 +233,7 @@ static void updateHud()
         p.killcount,
         gamemap,
     };
-    bool dirty[2] = {false, false};
+    bool dirty[2] = {exitHolding != exitDrawn, false};
     for (int i = 0; i < H_COUNT; i++)
         if (values[i] != hud[i].last) dirty[i >= H_KILL ? 0 : 1] = true;
 
@@ -235,6 +243,14 @@ static void updateHud()
         LGFX_Sprite &b = band[which];
         int bandY = which == 0 ? 0 : VIEW - BAND_H;
         b.fillScreen(C_KEY);
+        if (which == 0)
+        {
+            b.setFont(&fonts::Font0);
+            b.setTextDatum(lgfx::middle_center);
+            b.setTextColor(exitHolding ? C_CORAL : C_GREY);
+            b.drawString(exitHolding ? "BACK TO TERRADIAL..." : "HOLD HERE TO EXIT", VIEW / 2, 20);
+            exitDrawn = exitHolding;
+        }
         for (int i = 0; i < H_COUNT; i++)
         {
             if ((i >= H_KILL) != (which == 0)) continue;
@@ -361,6 +377,7 @@ static void hold(uint8_t &held, uint8_t want)
 
 static const int SLIDER_ZONE = 110; // a touch landing left of this is the slider
 static const int USE_ZONE = PANEL_RES - 60; // right of this is use
+static const uint32_t EXIT_HOLD_MS = 2000;
 
 // Called every tick, from the game's own task.
 static void pollInput()
@@ -380,9 +397,10 @@ static void pollInput()
 
     // Touch. What a press does is decided where it lands, and kept until
     // the finger lifts: a slide that strays right is still a slide.
-    enum Mode { NONE, SLIDE, FIRE, USE };
+    enum Mode { NONE, SLIDE, FIRE, USE, EXIT };
     static Mode mode = NONE;
     static int originY = 0;
+    static uint32_t exitSince = 0;
     static uint8_t moveKey = 0, actionKey = 0;
     bool slideRun = false;
 
@@ -392,8 +410,10 @@ static void pollInput()
     {
         if (mode == NONE)
         {
-            mode = x < SLIDER_ZONE ? SLIDE : x > USE_ZONE ? USE : FIRE;
+            bool top = y < 64 && abs((int)x - PANEL_RES / 2) < 80;
+            mode = top ? EXIT : x < SLIDER_ZONE ? SLIDE : x > USE_ZONE ? USE : FIRE;
             originY = y;
+            exitSince = now;
         }
         if (mode == SLIDE)
         {
@@ -402,6 +422,16 @@ static void pollInput()
             sliderDy = dy;
             hold(moveKey, dy <= -SLIDE_WALK ? KEY_UPARROW : dy >= SLIDE_WALK ? KEY_DOWNARROW : 0);
             slideRun = abs(dy) >= SLIDE_RUN;
+        }
+        else if (mode == EXIT)
+        {
+            exitHolding = true;
+            if (now - exitSince >= EXIT_HOLD_MS)
+            {
+                // The dial is already the boot slot (see setup()).
+                Serial.println("[game] back to terraDial");
+                esp_restart();
+            }
         }
         else
         {
@@ -413,6 +443,7 @@ static void pollInput()
         mode = NONE;
         sliderActive = false;
         sliderDy = 0;
+        exitHolding = false;
         hold(moveKey, 0);
         hold(actionKey, 0);
     }
@@ -433,10 +464,30 @@ static void doomTask(void *)
     }
 }
 
+// Installed beside terraDial (partitions_dial_game.csv), the game makes the
+// dial the boot slot again the moment it starts: leaving, a crash, or the
+// power going all land back on the dial. The dial left its slot in NVS.
+static void returnToDialOnNextBoot()
+{
+    Preferences prefs;
+    prefs.begin("launcher", true);
+    uint8_t subtype = prefs.getUChar("dial", ESP_PARTITION_SUBTYPE_APP_OTA_0);
+    prefs.end();
+    const esp_partition_t *dial =
+        esp_partition_find_first(ESP_PARTITION_TYPE_APP, (esp_partition_subtype_t)subtype, NULL);
+    esp_app_desc_t desc;
+    if (dial && esp_ota_get_partition_description(dial, &desc) == ESP_OK &&
+        esp_ota_set_boot_partition(dial) == ESP_OK)
+        Serial.printf("[game] next boot: terraDial (%s)\n", desc.version);
+    else
+        Serial.println("[game] no terraDial to go back to; staying in the game");
+}
+
 void setup()
 {
     Serial.begin(115200);
     delay(300);
+    returnToDialOnNextBoot();
     Serial.printf("terraDial Doom on %s, WAD %u bytes\n", BOARD_NAME, (unsigned)(wad_end - wad_start));
 
     touch.begin();
