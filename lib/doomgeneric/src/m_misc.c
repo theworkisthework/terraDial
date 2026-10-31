@@ -64,8 +64,12 @@ void M_MakeDirectory(char *path)
 // Check if a file exists
 
 // terraDial: lets the port say a built-in WAD "exists" (see DG_OpenWad).
+#ifdef __GNUC__
 boolean DG_FileExists(char *filename) __attribute__((weak));
 boolean DG_FileExists(char *filename) { (void)filename; return false; }
+#else
+boolean DG_FileExists(char *filename); // no weak symbols: the port must define it
+#endif
 
 boolean M_FileExists(char *filename)
 {

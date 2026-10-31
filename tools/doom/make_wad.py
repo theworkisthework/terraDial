@@ -386,7 +386,7 @@ def stbar():
 
 # ------------------------------------------------------------------ the level
 
-def octagon_room(radius=640, sides=8):
+def octagon_room(radius=384, sides=8):
     """MAP01, for a first look: one convex room, so one subsector and no
     BSP to build. A real node builder comes with real levels."""
     verts = []
@@ -407,7 +407,9 @@ def octagon_room(radius=640, sides=8):
         bam = int(round(math.atan2(y1 - y0, x1 - x0) / (2 * math.pi) * 65536)) & 0xFFFF
         segs += struct.pack("<hhhhhh", a, b, bam - 65536 if bam > 32767 else bam, i, 0, 0)
     ssectors = struct.pack("<hh", len(lines), 0)
-    sectors = struct.pack("<hh8s8shhh", 0, 160, name8("TDFLOOR"), name8("TDCEIL"), 200, 0, 0)
+    # Tall and fully lit: in a low, dim room the far walls shrank to thin
+    # strips and faded to black.
+    sectors = struct.pack("<hh8s8shhh", 0, 256, name8("TDFLOOR"), name8("TDCEIL"), 255, 0, 0)
     reject = bytes(1)
     blockmap = make_blockmap(verts, lines)
     return [("MAP01", b""), ("THINGS", things), ("LINEDEFS", linedefs), ("SIDEDEFS", sidedefs),
@@ -473,7 +475,10 @@ def build():
     lumps.append(("STTMINUS", patch(digit("-", 14, 16, idx("lime", 22)))))
     lumps.append(("STTPRCNT", patch(percent(14, 16, idx("lime", 22)))))
 
-    pn, t1 = texture_lumps([("WALL1", "TDWALL1", 128, 128), ("WALL2", "TDWALL2", 128, 128),
+    # Texture 0 means "no texture" to the engine and is never drawn, so
+    # the list starts with a placeholder.
+    pn, t1 = texture_lumps([("TDNULL", "TDWALL1", 128, 128),
+                            ("WALL1", "TDWALL1", 128, 128), ("WALL2", "TDWALL2", 128, 128),
                             ("SKY1", "TDSKY", 256, 128)])
     lumps += [("PNAMES", pn), ("TEXTURE1", t1)]
     lumps += octagon_room()

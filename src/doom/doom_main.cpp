@@ -76,14 +76,22 @@ extern "C" unsigned int DG_FileExists(char *filename) { return strcmp(filename, 
 
 static const int GAME_W = DOOMGENERIC_RESX, GAME_H = DOOMGENERIC_RESY;
 static const int X0 = (PANEL_RES - GAME_W) / 2, Y0 = (PANEL_RES - GAME_H) / 2;
-static const int CHUNK_ROWS = 10; // even, for BOARD_PANEL_EVEN_WINDOWS; 6.4KB of internal RAM
+static const int CHUNK_ROWS = 10; // even, for BOARD_PANEL_EVEN_WINDOWS; 6.4KB of internal RAM each
+// Palette index -> RGB565 already in the panel's byte order (swap565), so a
+// strip goes out by DMA exactly as converted, with no copy on the way.
 static uint16_t lut[256];
-static uint16_t *chunk = nullptr; // internal RAM, so the transfer can use DMA
+// Two strips taking turns: one is converted while the other is still going
+// out by DMA. With one, the next strip overwrote the last mid-transfer --
+// the scrambled bands.
+static uint16_t *strip[2] = {nullptr, nullptr};
 
 static void rebuildLut()
 {
     for (int i = 0; i < 256; i++)
-        lut[i] = ((colors[i].r & 0xf8) << 8) | ((colors[i].g & 0xfc) << 3) | (colors[i].b >> 3);
+    {
+        uint16_t c = ((colors[i].r & 0xf8) << 8) | ((colors[i].g & 0xfc) << 3) | (colors[i].b >> 3);
+        lut[i] = (uint16_t)((c << 8) | (c >> 8));
+    }
 }
 
 extern "C" void DG_Init() {}
@@ -97,12 +105,16 @@ extern "C" void DG_DrawFrame()
     }
     const uint8_t *src = (const uint8_t *)DG_ScreenBuffer;
     gfx.startWrite();
+    int which = 0;
     for (int row = 0; row < GAME_H; row += CHUNK_ROWS)
     {
-        uint16_t *out = chunk;
+        uint16_t *out = strip[which];
         for (int i = 0; i < GAME_W * CHUNK_ROWS; i++) *out++ = lut[*src++];
-        gfx.pushImage(X0, Y0 + row, GAME_W, CHUNK_ROWS, (const lgfx::rgb565_t *)chunk);
+        gfx.waitDMA(); // the previous strip is out; the window can move on
+        gfx.pushImageDMA(X0, Y0 + row, GAME_W, CHUNK_ROWS, (const lgfx::swap565_t *)strip[which]);
+        which ^= 1;
     }
+    gfx.waitDMA();
     gfx.endWrite();
 }
 
@@ -215,7 +227,8 @@ void setup()
     backlightInit();
     jogWheel.begin();
 
-    chunk = (uint16_t *)heap_caps_malloc(GAME_W * CHUNK_ROWS * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    for (int i = 0; i < 2; i++)
+        strip[i] = (uint16_t *)heap_caps_malloc(GAME_W * CHUNK_ROWS * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
 
     // The renderer recurses down the BSP tree, so the game gets a stack of
     // its own, bigger than loop()'s 8KB. Internal RAM is the limit: the

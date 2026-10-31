@@ -52,8 +52,12 @@ static wad_file_class_t *wad_file_classes[] =
 
 // terraDial: a WAD built into the firmware. The port supplies this; it
 // returns NULL for any path it doesn't own.
+#ifdef __GNUC__
 wad_file_t *DG_OpenWad(char *path) __attribute__((weak));
 wad_file_t *DG_OpenWad(char *path) { (void)path; return NULL; }
+#else
+wad_file_t *DG_OpenWad(char *path); // no weak symbols: the port must define it
+#endif
 
 wad_file_t *W_OpenFile(char *path)
 {
