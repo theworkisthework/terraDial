@@ -1238,7 +1238,7 @@ else if (WiFi.status() != WL_CONNECTED)
         const char *why = GameLauncher::blockedReason();
         lv_label_set_text(gameConfirmMsg,
                           why ? why
-                              : "Machine control stops while you play: the dial restarts into the game and "
+                              : "Machine control stops while you play: the dial restarts into terraDoom and "
                                 "disconnects from the plotter. Hold the top of the screen to come back.");
         lv_obj_clear_flag(gameConfirm, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(gameConfirm);
@@ -1271,7 +1271,7 @@ else if (WiFi.status() != WL_CONNECTED)
         // The bigger game: a separate firmware, if this dial has it.
         if (GameLauncher::installed())
         {
-            lv_obj_t *playBtn = uiMakeButton(card, "Play the game", nullptr);
+            lv_obj_t *playBtn = uiMakeButton(card, "Play terraDoom", nullptr);
             lv_obj_add_event_cb(playBtn, openGameConfirmCb, LV_EVENT_CLICKED, NULL);
         }
     }
