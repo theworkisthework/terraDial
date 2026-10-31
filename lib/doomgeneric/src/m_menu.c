@@ -75,7 +75,8 @@ int			showMessages = 1;
 
 // Blocky mode, has default, 0 = high, 1 = normal
 int			detailLevel = 0;
-int			screenblocks = 10;
+// terraDial: 11 = no status bar; the port draws its own HUD round the rim.
+int			screenblocks = 11;
 
 // temp for screenblocks (0-9)
 int			screenSize;

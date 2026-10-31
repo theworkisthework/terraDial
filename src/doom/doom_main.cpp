@@ -13,6 +13,9 @@
 //   touch, bottom         back
 //   touch, centre         fire
 //   touch, left or right  use (doors, switches)
+//
+// The game fills a band across the middle of the circle; health, armour,
+// ink (ammo), kills and the level sit in little circles round the rim.
 #include <Arduino.h>
 #include "pins.h"
 #include "display/lgfx_config.h"
@@ -20,6 +23,7 @@
 #include "input/haptics.h"
 #include <CST816D.h>
 #include <esp_heap_caps.h>
+#include <climits>
 
 // Arduino's C++ has its own `boolean` (bool); Doom's is an unsigned int.
 // Doom's is renamed for these headers, and spelled out where it crosses over.
@@ -32,6 +36,9 @@ extern "C"
 #include "doomtype.h"
 
 #include "i_video.h"
+#include "d_player.h"
+#include "d_items.h"
+#include "doomstat.h"
     extern struct color colors[256]; // i_video.c's palette (CMAP256)
     extern unsigned int palette_changed;
 }
@@ -73,10 +80,18 @@ extern "C" wad_file_t *DG_OpenWad(char *path) { return memOpen(path); }
 extern "C" unsigned int DG_FileExists(char *filename) { return strcmp(filename, WAD_NAME) == 0; }
 
 // ---------------------------------------------------------------- video
+//
+// Doom's own status bar is off (screenblocks 11), so the 3D view fills the
+// whole 320x200 frame. It's scaled to the panel's full 360px width as a
+// band through the middle of the circle, 224 rows tall. Above and below
+// it, where the panel is too narrow to be worth drawing the game, are the
+// forward/back touch zones and the HUD: little circles round the rim, like
+// the dial's menu ring.
 
 static const int GAME_W = DOOMGENERIC_RESX, GAME_H = DOOMGENERIC_RESY;
-static const int X0 = (PANEL_RES - GAME_W) / 2, Y0 = (PANEL_RES - GAME_H) / 2;
-static const int CHUNK_ROWS = 10; // even, for BOARD_PANEL_EVEN_WINDOWS; 6.4KB of internal RAM each
+static const int VIEW_W = PANEL_RES, VIEW_H = 224; // even, for BOARD_PANEL_EVEN_WINDOWS
+static const int VIEW_Y = (PANEL_RES - VIEW_H) / 2;
+static const int CHUNK_ROWS = 8; // even; 5.8KB of internal RAM per strip
 // Palette index -> RGB565 already in the panel's byte order (swap565), so a
 // strip goes out by DMA exactly as converted, with no copy on the way.
 static uint16_t lut[256];
@@ -84,6 +99,9 @@ static uint16_t lut[256];
 // out by DMA. With one, the next strip overwrote the last mid-transfer --
 // the scrambled bands.
 static uint16_t *strip[2] = {nullptr, nullptr};
+// Nearest-neighbour scaling: which source column/row each output one shows.
+static uint16_t srcX[VIEW_W];
+static uint8_t srcY[VIEW_H];
 
 static void rebuildLut()
 {
@@ -94,7 +112,102 @@ static void rebuildLut()
     }
 }
 
-extern "C" void DG_Init() {}
+extern "C" void DG_Init()
+{
+    for (int x = 0; x < VIEW_W; x++) srcX[x] = x * GAME_W / VIEW_W;
+    for (int y = 0; y < VIEW_H; y++) srcY[y] = y * GAME_H / VIEW_H;
+}
+
+// ---------------------------------------------------------------- HUD
+//
+// terraPen colours, as the dial's skin: health coral, armour teal, ink
+// (ammo) lime along the bottom; kills and the level along the top. Each
+// circle is redrawn only when its number changes.
+
+static const uint16_t C_BG = 0x0000;
+static const uint16_t C_LIME = 0xE78B;  // #E5F15C
+static const uint16_t C_CORAL = 0xE9CD; // #E83B68
+static const uint16_t C_TEAL = 0x6679;  // #66CCCC
+static const uint16_t C_GREY = 0x8C51;
+static const int RIM_R = 150; // how far out the circles sit
+static const int DOT_R = 19;
+
+struct HudSlot
+{
+    float angleDeg; // 0 = right, 90 = down (screen coordinates)
+    uint16_t colour;
+    const char *label;
+    int last;
+};
+// Bottom: ink, health, armour. Top: kills, level.
+static HudSlot hud[] = {
+    {120, C_LIME, "INK", INT32_MIN},
+    {90, C_CORAL, "HP", INT32_MIN},
+    {60, C_TEAL, "ARM", INT32_MIN},
+    {240, C_GREY, "KILL", INT32_MIN},
+    {300, C_LIME, "LVL", INT32_MIN},
+};
+enum { H_INK, H_HP, H_ARM, H_KILL, H_LVL, H_COUNT };
+static bool hudNeedsFrame = true;
+
+static void drawSlot(HudSlot &s, int value)
+{
+    int cx = PANEL_RES / 2 + (int)lroundf(RIM_R * cosf(s.angleDeg * (float)M_PI / 180));
+    int cy = PANEL_RES / 2 + (int)lroundf(RIM_R * sinf(s.angleDeg * (float)M_PI / 180));
+    gfx.fillCircle(cx, cy, DOT_R, C_BG);
+    gfx.drawCircle(cx, cy, DOT_R, s.colour);
+    gfx.drawCircle(cx, cy, DOT_R - 1, s.colour);
+    gfx.setTextColor(s.colour, C_BG);
+    gfx.setTextDatum(lgfx::middle_center);
+    char buf[8];
+    if (value < 0) snprintf(buf, sizeof buf, "--");
+    else snprintf(buf, sizeof buf, "%d", value);
+    gfx.setFont(&fonts::Font2);
+    gfx.drawString(buf, cx, cy - 3);
+    gfx.setFont(&fonts::Font0);
+    gfx.drawString(s.label, cx, cy + 10);
+}
+
+static void drawChevrons()
+{
+    // Faint hints for the forward/back zones.
+    const int cx = PANEL_RES / 2;
+    for (int i = 0; i < 2; i++)
+    {
+        gfx.drawLine(cx - 10, 58 + i, cx, 50 + i, C_GREY);
+        gfx.drawLine(cx, 50 + i, cx + 10, 58 + i, C_GREY);
+        gfx.drawLine(cx - 10, 300 + i, cx, 308 + i, C_GREY);
+        gfx.drawLine(cx, 308 + i, cx + 10, 300 + i, C_GREY);
+    }
+}
+
+static void updateHud()
+{
+    if (hudNeedsFrame)
+    {
+        gfx.fillRect(0, 0, PANEL_RES, VIEW_Y, C_BG);
+        gfx.fillRect(0, VIEW_Y + VIEW_H, PANEL_RES, PANEL_RES - VIEW_Y - VIEW_H, C_BG);
+        drawChevrons();
+        for (auto &s : hud) s.last = INT32_MIN;
+        hudNeedsFrame = false;
+    }
+    if (gamestate != GS_LEVEL) return;
+    const player_t &p = players[consoleplayer];
+    int ammoType = weaponinfo[p.readyweapon].ammo;
+    int values[H_COUNT] = {
+        ammoType == am_noammo ? -1 : p.ammo[ammoType],
+        p.health,
+        p.armorpoints,
+        p.killcount,
+        gamemap,
+    };
+    for (int i = 0; i < H_COUNT; i++)
+    {
+        if (values[i] == hud[i].last) continue;
+        hud[i].last = values[i];
+        drawSlot(hud[i], values[i]);
+    }
+}
 
 extern "C" void DG_DrawFrame()
 {
@@ -106,15 +219,20 @@ extern "C" void DG_DrawFrame()
     const uint8_t *src = (const uint8_t *)DG_ScreenBuffer;
     gfx.startWrite();
     int which = 0;
-    for (int row = 0; row < GAME_H; row += CHUNK_ROWS)
+    for (int row = 0; row < VIEW_H; row += CHUNK_ROWS)
     {
         uint16_t *out = strip[which];
-        for (int i = 0; i < GAME_W * CHUNK_ROWS; i++) *out++ = lut[*src++];
+        for (int r = 0; r < CHUNK_ROWS; r++)
+        {
+            const uint8_t *line = src + srcY[row + r] * GAME_W;
+            for (int x = 0; x < VIEW_W; x++) *out++ = lut[line[srcX[x]]];
+        }
         gfx.waitDMA(); // the previous strip is out; the window can move on
-        gfx.pushImageDMA(X0, Y0 + row, GAME_W, CHUNK_ROWS, (const lgfx::swap565_t *)strip[which]);
+        gfx.pushImageDMA(0, VIEW_Y + row, VIEW_W, CHUNK_ROWS, (const lgfx::swap565_t *)strip[which]);
         which ^= 1;
     }
     gfx.waitDMA();
+    updateHud();
     gfx.endWrite();
 }
 
@@ -228,7 +346,7 @@ void setup()
     jogWheel.begin();
 
     for (int i = 0; i < 2; i++)
-        strip[i] = (uint16_t *)heap_caps_malloc(GAME_W * CHUNK_ROWS * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+        strip[i] = (uint16_t *)heap_caps_malloc(VIEW_W * CHUNK_ROWS * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
 
     // The renderer recurses down the BSP tree, so the game gets a stack of
     // its own, bigger than loop()'s 8KB. Internal RAM is the limit: the
