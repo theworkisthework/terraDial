@@ -214,8 +214,9 @@ them so rather than failing halfway.
 
 Released builds ship with **no Wi-Fi credentials baked in** — the first boot
 comes up unconnected, and you pick a network on the panel (Settings → Wi-Fi →
-scan). That's the flow a stranger's board has to use anyway, so it's the one
-that gets tested.
+scan). The selected network is saved on the panel, used automatically on
+subsequent boots, and retried if the connection drops. That's the flow a
+stranger's board has to use anyway, so it's the one that gets tested.
 
 ### After that — over Wi-Fi, from the panel
 

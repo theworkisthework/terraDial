@@ -414,8 +414,8 @@ void uiDialSetHandlers(void (*onOpen)(int index), bool (*onStatus)())
     onStatusTap = onStatus;
 }
 
-void uiDialSelectNext() { ring.selectNext(); }
-void uiDialSelectPrev() { ring.selectPrev(); }
+bool uiDialSelectNext() { return ring.selectNext(); }
+bool uiDialSelectPrev() { return ring.selectPrev(); }
 void uiDialOpenSelected() { ring.openSelected(); }
 int uiDialSelectedIndex() { return activeItems[ring.selectedIndex()]; }
 

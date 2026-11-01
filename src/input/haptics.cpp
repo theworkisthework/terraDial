@@ -11,6 +11,7 @@ namespace
     // DRV2605 registers (TI datasheet SLOS854, section 8.6).
     const uint8_t REG_STATUS = 0x00;
     const uint8_t REG_MODE = 0x01;
+    const uint8_t REG_RTP_INPUT = 0x02;
     const uint8_t REG_LIBRARY = 0x03;
     const uint8_t REG_WAVESEQ1 = 0x04;
     const uint8_t REG_WAVESEQ2 = 0x05;
@@ -31,8 +32,14 @@ namespace
     // than one long buzz. Stronger options if it's too faint: 1 (Strong
     // Click 100%) or 4 (Sharp Click 100%).
     const uint8_t EFFECT_DETENT = 24;
+    const uint8_t MODE_INTERNAL_TRIGGER = 0x00;
+    const uint8_t MODE_REAL_TIME_PLAYBACK = 0x05;
+    const uint8_t RTP_75_PERCENT_AMPLITUDE = 95; // 75% of the 0-127 RTP range.
+    const uint32_t RTP_PULSE_MS = 40;
 
     bool present = false;
+    bool pulseActive = false;
+    uint32_t pulseEndsAt = 0;
 
     bool writeReg(uint8_t reg, uint8_t value)
     {
@@ -68,7 +75,7 @@ namespace Haptics
         readReg(REG_FEEDBACK, feedback);
         readReg(REG_CONTROL3, control3);
 
-        present = writeReg(REG_MODE, 0x00) // out of standby, internal trigger
+        present = writeReg(REG_MODE, MODE_INTERNAL_TRIGGER) // out of standby, internal trigger
                   && writeReg(REG_FEEDBACK, feedback & 0x7F) // bit 7 clear: ERM
                   && writeReg(REG_CONTROL3, control3 | 0x20) // ERM open loop
                   && writeReg(REG_LIBRARY, LIBRARY_ERM_A)
@@ -82,7 +89,35 @@ namespace Haptics
 
     void detent()
     {
-        if (present) writeReg(REG_GO, 1);
+        if (!present) return;
+        if (pulseActive)
+        {
+            writeReg(REG_RTP_INPUT, 0);
+            writeReg(REG_MODE, MODE_INTERNAL_TRIGGER);
+            pulseActive = false;
+        }
+        writeReg(REG_GO, 1);
+    }
+
+    void pulse75()
+    {
+        if (!present) return;
+        if (!writeReg(REG_MODE, MODE_REAL_TIME_PLAYBACK)) return;
+        if (!writeReg(REG_RTP_INPUT, RTP_75_PERCENT_AMPLITUDE))
+        {
+            writeReg(REG_MODE, MODE_INTERNAL_TRIGGER);
+            return;
+        }
+        pulseEndsAt = millis() + RTP_PULSE_MS;
+        pulseActive = true;
+    }
+
+    void update()
+    {
+        if (!pulseActive || (int32_t)(millis() - pulseEndsAt) < 0) return;
+        writeReg(REG_RTP_INPUT, 0);
+        writeReg(REG_MODE, MODE_INTERNAL_TRIGGER);
+        pulseActive = false;
     }
 }
 
@@ -92,6 +127,8 @@ namespace Haptics
 {
     void begin() {}
     void detent() {}
+    void pulse75() {}
+    void update() {}
 }
 
 #endif

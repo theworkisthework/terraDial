@@ -1,7 +1,6 @@
 #include "encoder.h"
 #include <Arduino.h>
 #include "pins.h"
-#include "haptics.h"
 
 JogWheel jogWheel;
 
@@ -187,7 +186,6 @@ void JogWheel::updateRotation()
     if (detents != 0)
     {
         lastActivityAt_ = millis();
-        Haptics::detent(); // one tick however many detents landed: a fast spin buzzes, not stutters
     }
 }
 

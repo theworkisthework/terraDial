@@ -1443,9 +1443,12 @@ void uiSettingsHandleRotate(int32_t delta)
         // scrolls the hidden Wi-Fi card underneath. Clamped, not wrapped:
         // the list is short and Rescan is a natural end stop.
         int count = scanItemCount();
-        scanSel += (int)delta;
-        if (scanSel < 0) scanSel = 0;
-        if (scanSel >= count) scanSel = count - 1;
+        int64_t next = (int64_t)scanSel + delta;
+        bool hitEnd = next < 0 || next >= count;
+        if (next < 0) next = 0;
+        if (next >= count) next = count - 1;
+        scanSel = (int)next;
+        if (hitEnd) Haptics::pulse75();
         styleScanSelection();
         return;
     }
@@ -1456,8 +1459,10 @@ void uiSettingsHandleRotate(int32_t delta)
         uiKnobScroll(panels[openPanel], delta);
         return;
     }
-    for (int32_t i = 0; i < delta; i++) ring.selectNext();
-    for (int32_t i = 0; i < -delta; i++) ring.selectPrev();
+    bool hitEnd = false;
+    for (int32_t i = 0; i < delta; i++) hitEnd |= ring.selectNext();
+    for (int32_t i = 0; i < -delta; i++) hitEnd |= ring.selectPrev();
+    if (hitEnd) Haptics::pulse75();
 }
 
 void uiSettingsHandleClick()

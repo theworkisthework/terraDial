@@ -85,8 +85,8 @@ public:
     // have changed.
     void setCount(int count);
 
-    void selectNext();
-    void selectPrev();
+    bool selectNext();
+    bool selectPrev();
     int selectedIndex() const { return selectedIndex_; }
     int count() const { return count_; }
 
@@ -172,7 +172,7 @@ private:
     float spreadAngle(float angle, float limit) const;
     void layout();
     void animateTo(int32_t targetX100);
-    void stepSelection(int delta);
+    bool stepSelection(int delta);
 
     static void animCb(void *inst, int32_t v);
     static void itemTapCb(lv_event_t *e);

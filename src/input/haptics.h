@@ -13,7 +13,12 @@ namespace Haptics
     // DRV2605 just leaves haptics off; it's a nicety, never a boot failure.
     void begin();
 
-    // One short tick, for a knob detent. Cheap: a single register write
-    // that starts the effect loaded at begin().
+    // One short click using the preset effect loaded at begin().
     void detent();
+
+    // A brief real-time pulse at 75% of the DRV2605's RTP amplitude.
+    void pulse75();
+
+    // Call from loop() to end real-time pulses without blocking UI work.
+    void update();
 }

@@ -2,6 +2,7 @@
 #include "ui_scale.h"
 #include "lucide_icons.h"
 #include "palette.h"
+#include "../input/haptics.h"
 
 lv_obj_t *uiMakeRow(lv_obj_t *parent, const char *labelText, lv_obj_t **outLabel)
 {
@@ -237,11 +238,14 @@ void uiKnobScroll(lv_obj_t *page, int32_t delta)
 
     lv_coord_t now = lv_obj_get_scroll_y(page);
     bool continuing = page == lastPage && lv_tick_elaps(lastAt) < CONTINUE_MS;
-    lv_coord_t to = (continuing ? target : now) + (lv_coord_t)delta * STEP_PX;
+    lv_coord_t requested = (continuing ? target : now) + (lv_coord_t)delta * STEP_PX;
 
     // Clamp to the page, or a spin past the end would bank distance that
     // the next spin back has to unwind before anything moves.
     lv_coord_t maxY = now + lv_obj_get_scroll_bottom(page);
+    if (maxY < 0) maxY = 0;
+    bool hitEnd = requested > maxY || requested < 0;
+    lv_coord_t to = requested;
     if (to > maxY) to = maxY;
     if (to < 0) to = 0;
 
@@ -249,6 +253,7 @@ void uiKnobScroll(lv_obj_t *page, int32_t delta)
     target = to;
     lastAt = lv_tick_get();
     if (to != now) lv_obj_scroll_to_y(page, to, LV_ANIM_ON);
+    if (hitEnd) Haptics::pulse75();
 }
 
 UiRingIconSize uiRingIconSize(float nearness, UiRingIconSize current)

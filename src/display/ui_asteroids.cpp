@@ -198,6 +198,7 @@ namespace
             b.vy = -cosf(a) * speed;
             b.lifeMs = BULLET_LIFE_MS;
             lastFireAt = now;
+            Haptics::pulse75();
             return;
         }
     }

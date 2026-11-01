@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "ui_nav.h"
+#include "../input/haptics.h"
 #include "ui_scale.h"
 #include <lvgl.h>
 #include "ui_dial.h"
@@ -309,8 +310,10 @@ namespace UiNav
             // of once per call, or the extras get silently dropped (felt
             // as needing several physical clicks before anything visibly
             // moves).
-            for (int32_t i = 0; i < menuDelta; i++) uiDialSelectNext();
-            for (int32_t i = 0; i < -menuDelta; i++) uiDialSelectPrev();
+            bool hitEnd = false;
+            for (int32_t i = 0; i < menuDelta; i++) hitEnd |= uiDialSelectNext();
+            for (int32_t i = 0; i < -menuDelta; i++) hitEnd |= uiDialSelectPrev();
+            if (hitEnd) Haptics::pulse75();
 
             // No LongPress shortcut here anymore -- it used to jump straight
             // to Settings, which read as a stray/unexplained screen change

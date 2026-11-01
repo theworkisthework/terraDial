@@ -277,9 +277,9 @@ void RadialRing::animateTo(int32_t targetX100)
     lv_anim_start(&a);
 }
 
-void RadialRing::stepSelection(int delta)
+bool RadialRing::stepSelection(int delta)
 {
-    if (count_ == 0) return;
+    if (count_ == 0) return false;
 
     int prev = selectedIndex_;
     if (arcMode())
@@ -290,19 +290,25 @@ void RadialRing::stepSelection(int delta)
         if (next < 0) next = 0;
         if (next > count_ - 1) next = count_ - 1;
         selectedIndex_ = next;
-        if (selectedIndex_ == prev) return; // already at an end -- nothing moves
+        if (selectedIndex_ == prev) return true; // already at an end -- nothing moves
         animateTo(-(int32_t)(selectedIndex_ * stepDeg() * 100));
     }
     else
     {
+        bool wrapped = count_ > 1 &&
+                       ((delta > 0 && selectedIndex_ + delta >= count_) ||
+                        (delta < 0 && selectedIndex_ + delta < 0));
         selectedIndex_ = ((selectedIndex_ + delta) % count_ + count_) % count_;
         animateTo(targetOffsetX100_ - (int32_t)(delta * stepDeg() * 100));
+        if (onSelect_) onSelect_(selectedIndex_);
+        return wrapped;
     }
     if (onSelect_) onSelect_(selectedIndex_);
+    return false;
 }
 
-void RadialRing::selectNext() { stepSelection(1); }
-void RadialRing::selectPrev() { stepSelection(-1); }
+bool RadialRing::selectNext() { return stepSelection(1); }
+bool RadialRing::selectPrev() { return stepSelection(-1); }
 
 void RadialRing::openSelected()
 {

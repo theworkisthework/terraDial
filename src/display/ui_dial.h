@@ -18,8 +18,8 @@ lv_obj_t *uiDialCreate();
 void uiDialSetHandlers(void (*onOpen)(int index), bool (*onStatus)());
 
 // Knob integration -- only meaningful while the dial is the active screen.
-void uiDialSelectNext();
-void uiDialSelectPrev();
+bool uiDialSelectNext();
+bool uiDialSelectPrev();
 void uiDialOpenSelected();
 int uiDialSelectedIndex(); // position in DIAL_ITEMS (ui_dial.cpp)
 

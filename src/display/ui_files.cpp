@@ -8,6 +8,7 @@
 #include "ui_widgets.h"
 #include "ui_nav.h"
 #include "../config/settings.h"
+#include "../input/haptics.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -408,8 +409,10 @@ bool uiFilesHandleBack()
 void uiFilesHandleRotate(int32_t delta)
 {
     if (delta == 0) return;
-    for (int32_t i = 0; i < delta; i++) ring.selectNext();
-    for (int32_t i = 0; i < -delta; i++) ring.selectPrev();
+    bool hitEnd = false;
+    for (int32_t i = 0; i < delta; i++) hitEnd |= ring.selectNext();
+    for (int32_t i = 0; i < -delta; i++) hitEnd |= ring.selectPrev();
+    if (hitEnd) Haptics::pulse75();
 }
 
 void uiFilesHandleSelect()

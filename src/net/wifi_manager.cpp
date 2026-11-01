@@ -15,6 +15,7 @@ namespace
     {
         WiFi.mode(WIFI_STA);
         WiFi.setSleep(false); // matches terraPixel's note: WiFi sleep hurts responsiveness of the status stream
+        WiFi.setAutoReconnect(true);
         // No network configured (first boot, or Settings > Wi-Fi > Forget):
         // stay in STA mode, which the network scan needs, but don't ask the
         // radio to join a network with no name.

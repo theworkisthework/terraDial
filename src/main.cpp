@@ -406,6 +406,7 @@ void loop()
     uiSpiroUpdate(); // a running spirograph plot is fed from here, whatever's on screen
     UiNav::update(); // also drives uiLightsUpdate(), but only while Lights is on screen
     DemoBadge::update();
+    Haptics::update();
 
     // WifiManager::update()/fluidNC.update() deliberately absent -- they run
     // on networkTask (core 0) so their blocking calls can't stall the UI.

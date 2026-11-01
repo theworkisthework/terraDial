@@ -1,4 +1,5 @@
 #include "radial_keyboard.h"
+#include "../input/haptics.h"
 #include "ui_scale.h"
 #include "lucide_icons.h"
 #include "palette.h"
@@ -617,6 +618,8 @@ namespace RadialKeyboard
     void handleRotate(int32_t delta)
     {
         if (!overlay || keyCount == 0 || delta == 0) return;
+        int64_t next = (int64_t)selected + delta;
+        if (keyCount > 1 && (next < 0 || next >= keyCount)) Haptics::pulse75();
         stepSelection(delta);
         applySelection();
     }
